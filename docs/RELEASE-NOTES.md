@@ -8,7 +8,7 @@ Experimental opt-in sequential continuity between Codex and Claude Code. Existin
 - Backend diagnostics, subscription configuration templates, sanitized coordination output, and opt-in isolated continuity/lifecycle pilots.
 - Reproducible reliability evaluation and local provider fault injection from the previous source-only update.
 
-Validation includes 306 automated tests, 15 scoped permission checks, simulated continuity in both directions, native policy smokes, and independent package installation. Authorized isolated real pilots exercised both backends, both handoff directions, cross-process recovery, cancellation, and denied approvals. These checks do not establish broad repository reliability, actual quota-exhaustion behavior, cost savings, or model-quality equivalence. Native adapters are pinned to the versions documented in CONTINUITY.md; newer versions require verification.
+Validation includes 307 automated tests, 15 scoped permission checks, simulated continuity in both directions, native policy smokes, and independent package installation. Authorized isolated real pilots exercised both backends, both handoff directions, cross-process recovery, cancellation, and denied approvals. These checks do not establish broad repository reliability, actual quota-exhaustion behavior, cost savings, or model-quality equivalence. Native adapters are pinned to the versions documented in CONTINUITY.md; newer versions require verification.
 
 Private pilot reports, prompts, native session identifiers, and credentials are excluded from the release. No additional real inference is required to package this alpha. The GitHub prerelease includes an npm-compatible .tgz and SHA-256 checksum; npm registry publishing remains disabled.
 

@@ -20,9 +20,10 @@ export function restrictedCodexModel(metadata: Record<string, any>) {
 }
 export async function cachedCodexModels(ids: string[], available: Set<string>) {
   // Only public model metadata is read. Account identity, auth files and tokens are never copied.
+  const requested = [...new Set(ids)];
+  if (requested.some(id => !available.has(id))) throw new Error('CODEX_MODEL_NOT_AVAILABLE');
   const cache = JSON.parse(await readFile(join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'models_cache.json'), 'utf8'));
-  return [...new Set(ids)].map(id => {
-    if (!available.has(id)) throw new Error('CODEX_MODEL_NOT_AVAILABLE');
+  return requested.map(id => {
     const model = cache.models?.find((m: any) => m.slug === id);
     if (!model) throw new Error('CODEX_MODEL_METADATA_UNAVAILABLE');
     return restrictedCodexModel(model);

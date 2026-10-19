@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { CodexBackend } from '../src/codex-backend.js';
 import { claudeQuota } from '../src/claude-quota.js';
-import { featureNames, restrictedCodexModel, verifyCodexPolicy } from '../src/codex-policy.js';
+import { cachedCodexModels, featureNames, restrictedCodexModel, verifyCodexPolicy } from '../src/codex-policy.js';
 import type { Destination } from '../src/types.js';
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const fn of cleanup.splice(0)) await fn(); });
@@ -97,4 +97,12 @@ it('binds Claude quota evidence to its session and documented error', () => {
   expect(claudeQuota(event, 'other')).toBeUndefined(); expect(claudeQuota(event, 'fixture')?.state).toBe('exhausted');
   expect(claudeQuota({ ...event, rate_limit_info: { status: 'rejected' } }, 'fixture')).toBeUndefined();
   expect(claudeQuota({ ...event, rate_limit_info: { status: 'allowed_warning' } }, 'fixture')?.state).toBe('available');
+});
+
+it('reports unavailable models before accessing an absent local metadata cache', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'smart-empty-codex-home-'));
+  const previous = process.env.CODEX_HOME; process.env.CODEX_HOME = home;
+  cleanup.push(async () => { if (previous === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = previous; await rm(home, { recursive: true, force: true }); });
+  await expect(cachedCodexModels(['unavailable'], new Set())).rejects.toThrow('CODEX_MODEL_NOT_AVAILABLE');
+  await expect(cachedCodexModels(['available'], new Set(['available']))).rejects.toMatchObject({ code: 'ENOENT' });
 });
