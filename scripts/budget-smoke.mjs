@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';import {createServer} from 'node:http';import {startBudgetRelay} from './budget-relay.mjs';import {OpenRouterMeter} from '../dist/openrouter-meter.js';
+const key='local-fake',token='local-proof';let forwarded=0,received;
+const upstream=createServer(async(req,res)=>{if(req.url.startsWith('/generation')){res.end(JSON.stringify({data:{id:'gen-local-v3',model:'fixture',total_cost:0.02,finish_reason:'stop',native_tokens_prompt:100,native_tokens_completion:10}}));return;}const chunks=[];for await(const c of req)chunks.push(c);received=JSON.parse(Buffer.concat(chunks));forwarded++;res.setHeader('content-type','application/json');res.end(JSON.stringify({id:'gen-local-v3',choices:[]}));});await new Promise(r=>upstream.listen(0,'127.0.0.1',r));
+const prices={input:0.0000176,output:0.000044},guard=await startBudgetRelay({apiKey:key,models:{fixture:prices},maxCostUsd:5,initialCostUsd:2.936304772,maxOutputTokens:3072,upstream:'http://127.0.0.1:'+upstream.address().port,localDenialToken:token}),meter=await OpenRouterMeter.start(key,guard.baseURL,[1],{localDenialToken:token});
+try{
+ const body={model:'fixture',messages:[{role:'user',content:'hello'}],max_tokens:3072};body.messages[0].content='x'.repeat(110154-2048-Buffer.byteLength(JSON.stringify(body))+5);
+ const send=async b=>{const r=await fetch(meter.baseURL+'/chat/completions',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(b)});await r.text();return r;};
+ assert.equal((await send(body)).status,200);assert.equal(received.max_tokens,2840);assert.equal(forwarded,1);assert.equal(guard.state.unknownCost,false);assert.equal((await meter.usageSince(0,'fixture'))[0].costUsd,0.02);
+ const mark=meter.mark();assert.equal((await send({...body,messages:[{role:'user',content:'x'.repeat(500000)}]})).status,403);assert.equal(forwarded,1);assert.equal((await meter.usageSince(mark,'fixture'))[0].source,'local');assert.equal(guard.state.spentUsd,2.956304772);
+ console.log('Real relay chain with local mock: pilot boundary funded at 2840 tokens; impossible request denied without inference or unknown cost.');
+}finally{meter.close();guard.close();upstream.closeAllConnections();upstream.close();}

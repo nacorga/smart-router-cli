@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';import {pilotPermission} from './scoped-permission.mjs';
+const root='/private/tmp/fixture',file='tests/allowed.test.ts',target=root+'/'+file;
+const edit=(path,metadata={})=>'edit: '+path+'\n'+JSON.stringify(metadata);
+const check=d=>pilotPermission(root,[file],['npm run type-check'],d);
+for(const path of [file,target,target.slice(1)])assert.equal(check(edit(path,{filepath:target})),true);
+for(const path of ['*','tests/other.test.ts','../allowed.test.ts','/private/tmp/other/tests/allowed.test.ts',file+', tests/other.test.ts'])assert.equal(check(edit(path)),false);
+assert.equal(check(edit(file,{filepath:'/private/tmp/other/tests/allowed.test.ts'})),false);
+assert.equal(check('bash: npm run type-check\n'+JSON.stringify({command:'npm run type-check',workdir:root})),true);
+for(const command of ['npm run type-check; echo done','npm test','rm -rf /'])assert.equal(check('bash: '+command+'\n'+JSON.stringify({command})),false);
+assert.equal(check('bash: npm run type-check\n'+JSON.stringify({command:'npm run type-check',workdir:'/private/tmp/other'})),false);
+assert.equal(pilotPermission(root,[],[],edit(target)),false);
+console.log('15 path/command permission checks passed; only explicit target paths and exact commands accepted.');

@@ -1,0 +1,574 @@
+[
+  {
+    "id": "01",
+    "category": "trivial",
+    "name": "double",
+    "prompt": "Corrige la errata: double debe devolver el doble del número.",
+    "checks": [
+      [
+        2,
+        4
+      ],
+      [
+        -3,
+        -6
+      ],
+      [
+        0,
+        0
+      ]
+    ]
+  },
+  {
+    "id": "02",
+    "category": "trivial",
+    "name": "greeting",
+    "prompt": "Corrige la errata: greeting devuelve Hola seguido de un espacio y del nombre.",
+    "checks": [
+      [
+        "Ana",
+        "Hola Ana"
+      ],
+      [
+        "Luis",
+        "Hola Luis"
+      ]
+    ]
+  },
+  {
+    "id": "03",
+    "category": "trivial",
+    "name": "isEven",
+    "prompt": "Implementa isEven para enteros pares incluidos negativos y cero.",
+    "checks": [
+      [
+        2,
+        true
+      ],
+      [
+        -3,
+        false
+      ],
+      [
+        0,
+        true
+      ]
+    ]
+  },
+  {
+    "id": "04",
+    "category": "trivial",
+    "name": "trimText",
+    "prompt": "Implementa trimText para quitar espacios iniciales y finales.",
+    "checks": [
+      [
+        " x ",
+        "x"
+      ],
+      [
+        "",
+        ""
+      ],
+      [
+        " a b ",
+        "a b"
+      ]
+    ]
+  },
+  {
+    "id": "05",
+    "category": "trivial",
+    "name": "clampZero",
+    "prompt": "Implementa clampZero que devuelve cero para números negativos y conserva los demás.",
+    "checks": [
+      [
+        -2,
+        0
+      ],
+      [
+        3,
+        3
+      ],
+      [
+        0,
+        0
+      ]
+    ]
+  },
+  {
+    "id": "06",
+    "category": "usual",
+    "name": "sum",
+    "prompt": "Implementa sum que suma un array de números, incluido el vacío.",
+    "checks": [
+      [
+        [
+          1,
+          2,
+          3
+        ],
+        6
+      ],
+      [
+        [],
+        0
+      ],
+      [
+        [
+          -1,
+          2
+        ],
+        1
+      ]
+    ]
+  },
+  {
+    "id": "07",
+    "category": "usual",
+    "name": "unique",
+    "prompt": "Implementa unique que elimina duplicados conservando el orden.",
+    "checks": [
+      [
+        [
+          2,
+          1,
+          2,
+          3
+        ],
+        [
+          2,
+          1,
+          3
+        ]
+      ],
+      [
+        [],
+        []
+      ]
+    ]
+  },
+  {
+    "id": "08",
+    "category": "usual",
+    "name": "median",
+    "prompt": "Implementa median para un array numérico no vacío sin modificar la entrada.",
+    "checks": [
+      [
+        [
+          3,
+          1,
+          2
+        ],
+        2
+      ],
+      [
+        [
+          1,
+          4
+        ],
+        2.5
+      ]
+    ]
+  },
+  {
+    "id": "09",
+    "category": "usual",
+    "name": "slug",
+    "prompt": "Implementa slug: minúsculas, espacios a guiones y quitar guiones extremos.",
+    "checks": [
+      [
+        " Hello World ",
+        "hello-world"
+      ],
+      [
+        "A   B",
+        "a-b"
+      ]
+    ]
+  },
+  {
+    "id": "10",
+    "category": "usual",
+    "name": "countWords",
+    "prompt": "Implementa countWords con espacios en blanco, cadena vacía devuelve cero.",
+    "checks": [
+      [
+        "a b",
+        2
+      ],
+      [
+        "  ",
+        0
+      ],
+      [
+        "a\nb",
+        2
+      ]
+    ]
+  },
+  {
+    "id": "11",
+    "category": "usual",
+    "name": "groupCounts",
+    "prompt": "Implementa groupCounts: cuenta ocurrencias en un array de strings en un objeto.",
+    "checks": [
+      [
+        [
+          "a",
+          "b",
+          "a"
+        ],
+        {
+          "a": 2,
+          "b": 1
+        }
+      ],
+      [
+        [],
+        {}
+      ]
+    ]
+  },
+  {
+    "id": "12",
+    "category": "usual",
+    "name": "sortNumbers",
+    "prompt": "Implementa sortNumbers ascendente sin modificar el array original.",
+    "checks": [
+      [
+        [
+          10,
+          2,
+          1
+        ],
+        [
+          1,
+          2,
+          10
+        ]
+      ],
+      [
+        [],
+        []
+      ]
+    ]
+  },
+  {
+    "id": "13",
+    "category": "complex",
+    "name": "migrateRecords",
+    "prompt": "Migra múltiples módulos: migrateRecords transforma registros {name} a {displayName,version:2}, y conserva registros versión 2 sin duplicar transformación.",
+    "checks": [
+      [
+        [
+          {
+            "name": "Ana"
+          }
+        ],
+        [
+          {
+            "displayName": "Ana",
+            "version": 2
+          }
+        ]
+      ],
+      [
+        [
+          {
+            "displayName": "X",
+            "version": 2
+          }
+        ],
+        [
+          {
+            "displayName": "X",
+            "version": 2
+          }
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "14",
+    "category": "complex",
+    "name": "flatten",
+    "prompt": "Rediseña flatten para aplanar arrays anidados de cualquier profundidad, conservando orden.",
+    "checks": [
+      [
+        [
+          1,
+          [
+            2,
+            [
+              3
+            ]
+          ],
+          4
+        ],
+        [
+          1,
+          2,
+          3,
+          4
+        ]
+      ],
+      [
+        [],
+        []
+      ]
+    ]
+  },
+  {
+    "id": "15",
+    "category": "complex",
+    "name": "mergeConfig",
+    "prompt": "Arquitectura de mergeConfig: recibe [base,override], mezcla objetos recursivamente, reemplaza arrays y no modifica entradas.",
+    "checks": [
+      [
+        [
+          {
+            "a": {
+              "b": 1,
+              "c": 2
+            }
+          },
+          {
+            "a": {
+              "b": 3
+            }
+          }
+        ],
+        {
+          "a": {
+            "b": 3,
+            "c": 2
+          }
+        }
+      ],
+      [
+        [
+          {
+            "a": [
+              1
+            ]
+          },
+          {
+            "a": [
+              2
+            ]
+          }
+        ],
+        {
+          "a": [
+            2
+          ]
+        }
+      ]
+    ]
+  },
+  {
+    "id": "16",
+    "category": "complex",
+    "name": "topological",
+    "prompt": "Implementa arquitectura topological: recibe objeto nodo -> dependencias y devuelve lista ordenada (dependencias primero), con empate alfabético; ciclo devuelve null.",
+    "checks": [
+      [
+        {
+          "a": [
+            "b"
+          ],
+          "b": []
+        },
+        [
+          "b",
+          "a"
+        ]
+      ],
+      [
+        {
+          "a": [
+            "b"
+          ],
+          "b": [
+            "a"
+          ]
+        },
+        null
+      ]
+    ]
+  },
+  {
+    "id": "17",
+    "category": "complex",
+    "name": "intervals",
+    "prompt": "Refactor transversal: intervals une intervalos solapados y adyacentes de un array [inicio,fin], ordenados por inicio, sin mutar entrada.",
+    "checks": [
+      [
+        [
+          [
+            5,
+            7
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            3,
+            5
+          ]
+        ],
+        [
+          [
+            1,
+            7
+          ]
+        ]
+      ],
+      [
+        [],
+        []
+      ]
+    ]
+  },
+  {
+    "id": "18",
+    "category": "sensitive",
+    "name": "paymentCents",
+    "prompt": "Implementa paymentCents para esta especificación sintética de pagos: solo acepta strings completos con dígitos ASCII antes del punto y exactamente dos después; el importe es no negativo (cero válido) y se permiten ceros a la izquierda. Devuelve céntimos enteros exactos dentro de Number.MAX_SAFE_INTEGER; formato inválido, tipos distintos de string o desbordamiento devuelven null. No admite signo, espacios, coma ni saltos de línea. Requiere revisión de la implementación.",
+    "checks": [
+      [
+        "12.34",
+        1234
+      ],
+      [
+        "0.00",
+        0
+      ],
+      [
+        "1.999",
+        null
+      ],
+      [
+        "-1.00",
+        null
+      ],
+      [
+        "1e2",
+        null
+      ],
+      [
+        "01.50",
+        150
+      ],
+      [
+        ".50",
+        null
+      ],
+      [
+        "1.0",
+        null
+      ],
+      [
+        "1.00\n",
+        null
+      ],
+      [
+        " 1.00",
+        null
+      ],
+      [
+        "1,00",
+        null
+      ],
+      [
+        1,
+        null
+      ],
+      [
+        null,
+        null
+      ],
+      [
+        "90071992547409.91",
+        9007199254740991
+      ],
+      [
+        "90071992547409.92",
+        null
+      ]
+    ]
+  },
+  {
+    "id": "19",
+    "category": "sensitive",
+    "name": "hasPermission",
+    "prompt": "Implementa autenticación hasPermission([roles,required]): permite solo si roles es array de strings y contiene exactamente required; defecto denegar.",
+    "checks": [
+      [
+        [
+          [
+            "admin"
+          ],
+          "admin"
+        ],
+        true
+      ],
+      [
+        [
+          [
+            "user"
+          ],
+          "admin"
+        ],
+        false
+      ],
+      [
+        [
+          null,
+          "admin"
+        ],
+        false
+      ],
+      [
+        [
+          [
+            "ADMIN"
+          ],
+          "admin"
+        ],
+        false
+      ]
+    ]
+  },
+  {
+    "id": "20",
+    "category": "sensitive",
+    "name": "redactSecrets",
+    "prompt": "Implementa redactSecrets recursivo sin mutar objetos: sustituye valores de claves password, token, apiKey (sin distinción de mayúsculas) por [REDACTED], incluyendo arrays.",
+    "checks": [
+      [
+        {
+          "name": "Ana",
+          "token": "abc"
+        },
+        {
+          "name": "Ana",
+          "token": "[REDACTED]"
+        }
+      ],
+      [
+        [
+          {
+            "Password": "x"
+          }
+        ],
+        [
+          {
+            "Password": "[REDACTED]"
+          }
+        ]
+      ]
+    ]
+  }
+]

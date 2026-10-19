@@ -1,0 +1,37 @@
+name: Bug report
+description: Report a reproducible failure with sanitized details.
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach API keys, native histories, billing exports, or confidential source code. Use private vulnerability reporting for security issues.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS, architecture, Node and npm versions
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal sanitized reproduction
+      description: Include commands and configuration with placeholders. Identify model IDs only if relevant; never include a key.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and sanitized status or error
+    validations:
+      required: true

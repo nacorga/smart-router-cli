@@ -1,0 +1,16 @@
+import fs from 'node:fs/promises';import {execFile} from 'node:child_process';import {promisify} from 'node:util';import {join} from 'node:path';import {tmpdir} from 'node:os';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';
+const exec=promisify(execFile),repo=process.cwd(),root=await fs.mkdtemp(join(tmpdir(),'smart-package-')),install=join(root,'install');await fs.mkdir(install);
+const env={...process.env};delete env.OPENROUTER_API_KEY;for(const key of ['XDG_CONFIG_HOME','XDG_DATA_HOME','XDG_CACHE_HOME','XDG_STATE_HOME']){env[key]=join(root,key.toLowerCase());await fs.mkdir(env[key]);}env.SMART_STATE_DIR=join(root,'state');
+const run=(file,args,cwd=repo)=>exec(file,args,{cwd,env,timeout:120000,maxBuffer:4*1024*1024});
+const {stdout}=await run('npm',['pack','--json','--pack-destination',root]);const packed=JSON.parse(stdout)[0];
+for(const entry of packed.files){assert.ok(!/(?:^|\/)(?:snapshots|node_modules|artifacts|\.smart-router)\//.test(entry.path));assert.ok(!/\.(?:csv|png|tar\.gz)$/.test(entry.path));assert.ok(!/\.env(?!\.example)/.test(entry.path));assert.ok(!entry.path.includes('-RESULT.json'));}
+for(const path of ['LICENSE','README.md','SECURITY.md','dist/cli.js','benchmark/cases.json','benchmark/historical-summary.json'])assert.ok(packed.files.some(f=>f.path===path),path+' missing');
+const tarball=join(root,packed.filename);await fs.writeFile(join(install,'package.json'),JSON.stringify({name:'smart-clean-install',private:true}));
+await run('npm',['install','--no-audit','--no-fund',tarball],install);const pkg=join(install,'node_modules/smart-router-cli');const cli=join(pkg,'dist/cli.js');
+assert.ok(!(await fs.lstat(join(install,'node_modules'))).isSymbolicLink());
+assert.match((await run(process.execPath,[cli,'--help'],install)).stdout,/Interactive mode/);
+await run(process.execPath,[cli,'--init'],install);assert.match(await fs.readFile(join(install,'smart-router.config.json'),'utf8'),/<FAST_MODEL_ID>/);
+const plan=JSON.parse((await run(process.execPath,[cli,'--plan','Implement a parser'],install)).stdout);assert.equal(plan.availabilityChecked,false);assert.deepEqual(plan.stages.map(s=>s.tier),['fast','balanced','balanced']);
+const demo=(await run(process.execPath,[cli,'--demo','Implement a parser'],install)).stdout;assert.match(demo,/OFFLINE DEMO/);assert.match(demo,/Result: unverified/);
+const server=(await run(process.execPath,[join(pkg,'dist/server-smoke.js')],install)).stdout;assert.match(server,/'?"sessionCreated":true/);assert.match(server,/"llmCalls":0/);
+const checksum=createHash('sha256').update(await fs.readFile(tarball)).digest('hex');const report={status:'passed',packageVersion:packed.version,packageFiles:packed.files.length,independentDependencies:true,checks:['help','init','plan','offline demo','native server'],realProviderInferenceRequests:0,billableCostUsd:0,tarball,sha256:checksum};await fs.writeFile(join(root,'package-smoke.json'),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));

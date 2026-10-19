@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.smart-router/
+.env
+.env.*
+!.env.example
+coverage/
+smart-router.config.json
+artifacts/
+*.tgz
+*.tar.gz
+*.log
+.DS_Store
+__pycache__/

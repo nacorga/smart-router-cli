@@ -1,0 +1,22 @@
+name: Feature request
+description: Describe a concrete workflow and the capability it needs.
+body:
+  - type: markdown
+    attributes:
+      value: Use sanitized examples only. Do not post credentials or confidential source code.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What task is blocked?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior and how you would verify it
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or current workaround

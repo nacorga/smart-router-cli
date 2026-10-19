@@ -1,0 +1,17 @@
+{
+  "mode": "auto",
+  "provider": "openrouter",
+  "models": {
+    "fast": "openrouter/<FAST_MODEL_ID>",
+    "balanced": "openrouter/<BALANCED_MODEL_ID>",
+    "deep": "openrouter/<DEEP_MODEL_ID>"
+  },
+  "limits": {
+    "maxCostUsd": 2,
+    "maxModelCalls": 16,
+    "maxEscalationsPerStage": 1,
+    "repairAttemptsBeforeEscalation": 1,
+    "maxInfrastructureRetries": 1
+  },
+  "minContext": 16000
+}

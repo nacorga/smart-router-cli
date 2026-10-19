@@ -1,0 +1,67 @@
+{
+  "name": "smart-router-cli",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "description": "Explainable model routing for local OpenCode sessions",
+  "bin": {
+    "smart": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --exclude '**/.smart-router/**'",
+    "dev": "node --import tsx src/cli.ts",
+    "spike": "node --import tsx src/spike.ts",
+    "benchmark": "node --import tsx src/benchmark.ts",
+    "smoke:server": "node --import tsx src/server-smoke.ts",
+    "smoke:permissions": "node --import tsx src/permissions-smoke.ts",
+    "spike:lifecycle": "node --import tsx src/lifecycle-spike.ts",
+    "spike:escalation": "node --import tsx src/escalation-spike.ts",
+    "smoke:review": "node --import tsx src/review-smoke.ts",
+    "smoke:cli": "npm run build && node --import tsx src/cli-smoke.ts",
+    "smoke:tty": "npm run build && python3 scripts/tty-smoke.py",
+    "smoke:controls": "npm run build && node dist/control-tools-smoke.js",
+    "smoke:validation": "npm run build && node scripts/validation-contract-smoke.mjs",
+    "test:permissions": "node scripts/scoped-permission.test.mjs",
+    "smoke:budget": "npm run build && node scripts/budget-smoke.mjs",
+    "smoke:package": "node scripts/package-smoke.mjs",
+    "audit:public": "node scripts/audit-public.mjs",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "1.19.3",
+    "opencode-ai": "1.19.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  },
+  "files": [
+    "dist/",
+    "benchmark/cases.json",
+    "smart-router.config.example.json",
+    ".env.example",
+    "README.md",
+    "LICENSE",
+    "docs/",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "benchmark/historical-summary.json"
+  ],
+  "license": "MIT",
+  "author": "nacorga",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nacorga/smart-router-cli.git"
+  },
+  "homepage": "https://github.com/nacorga/smart-router-cli#readme",
+  "bugs": {
+    "url": "https://github.com/nacorga/smart-router-cli/issues"
+  }
+}

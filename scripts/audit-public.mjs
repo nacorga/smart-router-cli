@@ -1,0 +1,14 @@
+import fs from 'node:fs/promises';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {join} from 'node:path';
+const exec=promisify(execFile),root=process.cwd();
+const patterns=[['personal path',/\/(?:Users\/|private\/var\/folders\/|var\/folders\/)/],['provider credential',/sk-or-v1-[A-Za-z0-9]{20,}/],['GitHub credential',/gh[pousr]_[A-Za-z0-9]{30,}/],['private key',/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/],['historical session',/\bses_[A-Za-z0-9]{12,}/],['historical generation',/\bgen-\d{9,}-[A-Za-z0-9]+/],['account data',/"(?:accountAvailableCreditsUsd|keyUsageBeforeUsd|keyUsageAfterUsd)"\s*:/]];
+const scan=(name,text)=>{for(const [kind,re]of patterns)if(re.test(text))throw new Error(`${kind} found in ${name}; value omitted`);};
+const checkName=name=>{if(/(?:^|\/)\.env(?:\.|$)/.test(name)&&name!=='.env.example')throw new Error('Local environment file selected');if(/\.(?:tgz|tar\.gz|csv|png|zip)$/.test(name)||/(?:^|\/)(?:snapshots|\.smart-router|node_modules)\//.test(name)||name==='smart-router.config.json')throw new Error('Private/generated artifact selected: '+name);};
+async function walk(dir,prefix=''){const list=[];for(const entry of await fs.readdir(dir,{withFileTypes:true})){if(['.git','node_modules','dist','artifacts','.DS_Store','coverage'].includes(entry.name))continue;const name=prefix+entry.name;if(entry.isDirectory())list.push(...await walk(join(dir,entry.name),name+'/'));else list.push(name);}return list;}
+const files=await walk(root);for(const name of files){checkName(name);scan(name,await fs.readFile(join(root,name),'utf8'));}
+// Audit every reachable Git blob and commit, not only the checkout.
+let objects;try{objects=(await exec('git',['rev-list','--objects','--all'],{cwd:root,maxBuffer:10*1024*1024})).stdout;}catch{objects='';}
+for(const line of objects.trim().split('\n').filter(Boolean)){const space=line.indexOf(' '),oid=space<0?line:line.slice(0,space),name=space<0?oid:line.slice(space+1);const type=(await exec('git',['cat-file','-t',oid],{cwd:root})).stdout.trim();if(type==='blob'){checkName(name);scan(name,(await exec('git',['cat-file','blob',oid],{cwd:root,maxBuffer:10*1024*1024})).stdout);}else if(type==='commit'){const text=(await exec('git',['cat-file','commit',oid],{cwd:root})).stdout;const identities=text.split('\n').filter(x=>/^(author|committer) /.test(x));if(identities.some(x=>!/@users\.noreply\.github\.com>/.test(x)))throw new Error('Commit identity is not a GitHub noreply address');scan('commit '+oid,text);}}
+console.log(JSON.stringify({status:'passed',files:files.length,historyChecked:!!objects,secretValuesPrinted:false}));
