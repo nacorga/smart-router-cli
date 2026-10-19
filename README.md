@@ -83,6 +83,10 @@ Smart Router stores task metadata, usage, decision reasons, and validation hashe
 
 Read [configuration](docs/CONFIGURATION.md), [security and privacy](SECURITY.md), [architecture](docs/ARCHITECTURE.md), and [evaluation limits](docs/BENCHMARK.md).
 
+## Reproduce reliability checks
+
+Unreleased source tooling adds ten controlled tasks across three fixture projects, an offline 60-slot rehearsal, and local failure injection. These are not results on real repositories. See the [reliability protocol](docs/RELIABILITY.md) for commands, frozen criteria, reporting, and the separately gated paid campaign.
+
 ## Develop and contribute
 
 ```sh

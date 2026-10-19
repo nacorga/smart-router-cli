@@ -26,3 +26,7 @@ The [sanitized historical summary](../benchmark/historical-summary.json) publish
 The benchmark review was performed by Codex after the owner waived human review. It is not a blinded independent evaluation. Post-hoc edge checks, changed core versions, model behavior, run order, and operational caps limit comparisons. Do not pool the different series or generalize a single repeated task.
 
 These experiments do **not** establish quality equivalence or savings with comparable quality. The alpha exposes a testable routing mechanism, not a validated economic advantage. New results should identify their exact commit, model IDs, criteria, all costs, and any censoring separately.
+
+## Prospective reliability suite
+
+The [reliability protocol](RELIABILITY.md) defines a separate ten-task controlled suite, frozen 60-slot schedule, offline rehearsal and failure injection. Its reference solutions are public and its projects are fixtures. Self-checks and simulations do not extend the historical paid evidence or establish reliability on real repositories.

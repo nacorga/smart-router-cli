@@ -30,7 +30,9 @@
     "smoke:budget": "npm run build && node scripts/budget-smoke.mjs",
     "smoke:package": "node scripts/package-smoke.mjs",
     "audit:public": "node scripts/audit-public.mjs",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "reliability": "npm run build && node dist/reliability.js",
+    "test:reliability": "vitest run tests/reliability.test.ts tests/reliability-faults.test.ts"
   },
   "dependencies": {
     "@opencode-ai/sdk": "1.19.3",
@@ -52,7 +54,8 @@
     "docs/",
     "SECURITY.md",
     "CONTRIBUTING.md",
-    "benchmark/historical-summary.json"
+    "benchmark/historical-summary.json",
+    "benchmark/reliability/"
   ],
   "license": "MIT",
   "author": "nacorga",

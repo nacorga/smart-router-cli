@@ -27,3 +27,7 @@ Describe the trigger, observed behavior, fix, and checks run. Preserve the CLI f
 Do not commit .env files, local model configuration, native sessions, billing exports, raw task transcripts, screenshots, tarballs, or confidential source code. The public historical results are intentionally sanitized and remain separate from future runs. Changes to measured criteria must be documented as a new evaluation version.
 
 The project uses MIT. Retain applicable notices when contributing third-party material. For vulnerabilities, follow SECURITY rather than filing a public issue.
+
+## Reliability evaluation
+
+Run `npm run test:reliability` for the local HTTP fault battery and harness checks. `npm run reliability -- --verify-fixtures` accepts references and rejects broken baselines/mutants without credentials. Read [the protocol](docs/RELIABILITY.md) before freezing a campaign. Never put `--run` in CI. New external tasks should use the prospective case template and remain separate from the public fixture suite.

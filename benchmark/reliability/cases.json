@@ -1,0 +1,820 @@
+[
+  {
+    "id": "Q01",
+    "project": "queue-kit",
+    "name": "insertByPriority",
+    "prompt": "Insert a job into a descending numeric priority queue. Equal priorities retain arrival order, including the new job last. Return a new array and preserve all job fields.",
+    "reference": "export function insertByPriority(queue, job) { return [...queue, job].sort((a,b)=>b.priority-a.priority); }",
+    "baseline": "export function insertByPriority(...args) { throw new Error(\"Not implemented\"); }",
+    "mutants": [
+      {
+        "name": "boundary-or-contract-regression",
+        "source": "export function insertByPriority(queue, job) { return [job, ...queue].sort((a,b)=>b.priority-a.priority); }"
+      }
+    ],
+    "checks": [
+      {
+        "args": [
+          [],
+          {
+            "id": "a",
+            "priority": 0
+          }
+        ],
+        "expected": [
+          {
+            "id": "a",
+            "priority": 0
+          }
+        ]
+      },
+      {
+        "args": [
+          [
+            {
+              "id": "a",
+              "priority": 2
+            },
+            {
+              "id": "b",
+              "priority": 1
+            }
+          ],
+          {
+            "id": "c",
+            "priority": 2
+          }
+        ],
+        "expected": [
+          {
+            "id": "a",
+            "priority": 2
+          },
+          {
+            "id": "c",
+            "priority": 2
+          },
+          {
+            "id": "b",
+            "priority": 1
+          }
+        ]
+      },
+      {
+        "args": [
+          [
+            {
+              "id": "a",
+              "priority": -2
+            }
+          ],
+          {
+            "id": "b",
+            "priority": -1,
+            "data": {
+              "x": 1
+            }
+          }
+        ],
+        "expected": [
+          {
+            "id": "b",
+            "priority": -1,
+            "data": {
+              "x": 1
+            }
+          },
+          {
+            "id": "a",
+            "priority": -2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "Q02",
+    "project": "queue-kit",
+    "name": "dequeueReady",
+    "prompt": "Return {job, remaining} for the first queue entry whose readyAt is at most now. Keep the other entries in order. If none is ready, job is null. Do not mutate inputs.",
+    "reference": "export function dequeueReady(queue, now) { const i=queue.findIndex(j=>j.readyAt<=now); return {job:i<0?null:queue[i], remaining:queue.filter((_,n)=>n!==i)}; }",
+    "baseline": "export function dequeueReady(...args) { throw new Error(\"Not implemented\"); }",
+    "mutants": [
+      {
+        "name": "boundary-or-contract-regression",
+        "source": "export function dequeueReady(queue, now) { const i=queue.findIndex(j=>j.readyAt<now); return {job:i<0?null:queue[i],remaining:queue.filter((_,n)=>n!==i)}; }"
+      }
+    ],
+    "checks": [
+      {
+        "args": [
+          [
+            {
+              "id": "a",
+              "readyAt": 9
+            },
+            {
+              "id": "b",
+              "readyAt": 5
+            }
+          ],
+          5
+        ],
+        "expected": {
+          "job": {
+            "id": "b",
+            "readyAt": 5
+          },
+          "remaining": [
+            {
+              "id": "a",
+              "readyAt": 9
+            }
+          ]
+        }
+      },
+      {
+        "args": [
+          [],
+          10
+        ],
+        "expected": {
+          "job": null,
+          "remaining": []
+        }
+      },
+      {
+        "args": [
+          [
+            {
+              "id": "x",
+              "readyAt": 11
+            }
+          ],
+          10
+        ],
+        "expected": {
+          "job": null,
+          "remaining": [
+            {
+              "id": "x",
+              "readyAt": 11
+            }
+          ]
+        }
+      },
+      {
+        "args": [
+          [
+            {
+              "id": "a",
+              "readyAt": 1
+            },
+            {
+              "id": "b",
+              "readyAt": 2
+            }
+          ],
+          10
+        ],
+        "expected": {
+          "job": {
+            "id": "a",
+            "readyAt": 1
+          },
+          "remaining": [
+            {
+              "id": "b",
+              "readyAt": 2
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "Q03",
+    "project": "queue-kit",
+    "name": "takeBatch",
+    "prompt": "Return {batch, remaining} taking at most limit entries from the front. A non-integer or negative limit throws RangeError. Preserve inputs.",
+    "reference": "export function takeBatch(queue, limit) { if(!Number.isInteger(limit)||limit<0)throw new RangeError(); return {batch:queue.slice(0,limit),remaining:queue.slice(limit)}; }",
+    "baseline": "export function takeBatch(...args) { throw new Error(\"Not implemented\"); }",
+    "mutants": [
+      {
+        "name": "boundary-or-contract-regression",
+        "source": "export function takeBatch(queue, limit) { return {batch:queue.splice(0,limit),remaining:queue}; }"
+      }
+    ],
+    "checks": [
+      {
+        "args": [
+          [
+            1,
+            2,
+            3
+          ],
+          2
+        ],
+        "expected": {
+          "batch": [
+            1,
+            2
+          ],
+          "remaining": [
+            3
+          ]
+        }
+      },
+      {
+        "args": [
+          [
+            1
+          ],
+          0
+        ],
+        "expected": {
+          "batch": [],
+          "remaining": [
+            1
+          ]
+        }
+      },
+      {
+        "args": [
+          [
+            1
+          ],
+          9
+        ],
+        "expected": {
+          "batch": [
+            1
+          ],
+          "remaining": []
+        }
+      },
+      {
+        "args": [
+          [],
+          2
+        ],
+        "expected": {
+          "batch": [],
+          "remaining": []
+        }
+      },
+      {
+        "args": [
+          [
+            1
+          ],
+          -1
+        ],
+        "throws": "RangeError"
+      },
+      {
+        "args": [
+          [
+            1
+          ],
+          1.5
+        ],
+        "throws": "RangeError"
+      }
+    ]
+  },
+  {
+    "id": "Q04",
+    "project": "queue-kit",
+    "name": "dedupeJobs",
+    "prompt": "For duplicate string job IDs, keep the last value while ordering IDs by their first appearance. IDs such as __proto__ must work. Return a new array without mutation.",
+    "reference": "export function dedupeJobs(jobs) { const m=new Map();for(const job of jobs)m.set(job.id,job);return [...m.values()]; }",
+    "baseline": "export function dedupeJobs(...args) { throw new Error(\"Not implemented\"); }",
+    "mutants": [
+      {
+        "name": "boundary-or-contract-regression",
+        "source": "export function dedupeJobs(jobs) { const m=new Map();for(const job of jobs)if(!m.has(job.id))m.set(job.id,job);return [...m.values()]; }"
+      }
+    ],
+    "checks": [
+      {
+        "args": [
+          [
+            {
+              "id": "a",
+              "v": 1
+            },
+            {
+              "id": "b",
+              "v": 2
+            },
+            {
+              "id": "a",
+              "v": 3
+            }
+          ]
+        ],
+        "expected": [
+          {
+            "id": "a",
+            "v": 3
+          },
+          {
+            "id": "b",
+            "v": 2
+          }
+        ]
+      },
+      {
+        "args": [
+          []
+        ],
+        "expected": []
+      },
+      {
+        "args": [
+          [
+            {
+              "id": "__proto__",
+              "v": 1
+            },
+            {
+              "id": "x",
+              "v": 2
+            },
+            {
+              "id": "__proto__",
+              "v": 3
+            }
+          ]
+        ],
+        "expected": [
+          {
+            "id": "__proto__",
+            "v": 3
+          },
+          {
+            "id": "x",
+            "v": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "C01",
+    "project": "cache-kit",
+    "name": "isFresh",
+    "prompt": "A cache entry {value, expiresAt} is fresh only when it exists and expiresAt is strictly greater than now. Null is absent. Zero and false values are valid cached values.",
+    "reference": "export function isFresh(entry, now) { return entry!==null && entry!==undefined && entry.expiresAt>now; }",
+    "baseline": "export function isFresh(...args) { throw new Error(\"Not implemented\"); }",
+    "mutants": [
+      {
+        "name": "boundary-or-contract-regression",
+        "source": "export function isFresh(entry, now) { return !!entry && entry.expiresAt>=now; }"
+      }
+    ],
+    "checks": [
+      {
+        "args": [
+          {
+            "value": 0,
+            "expiresAt": 11
+          },
+          10
+        ],
+        "expected": true
+      },
+      {
+        "args": [
+          {
+            "value": false,
+            "expiresAt": 10
+          },
+          10
+        ],
+        "expected": false
+      },
+      {
+        "args": [
+          null,
+          0
+        ],
+        "expected": false
+      },
+      {
+        "args": [
+          {
+            "value": false,
+            "expiresAt": 1
+          },
+          0
+        ],
+        "expected": true
+      },
+      {
+        "args": [
+          {
+            "value": "x",
+            "expiresAt": -1
+          },
+          0
+        ],
+        "expected": false
+      }
+    ]
+  },
+  {
+    "id": "C02",
+    "project": "cache-kit",
+    "name": "evictLRU",
+    "prompt": "Return at most capacity cache entries, evicting the smallest lastUsed first; equal timestamps evict earlier input entries first. Preserve survivor input order and inputs. capacity is a nonnegative integer.",
+    "reference": "export function evictLRU(entries, capacity) { const victims=new Set(entries.map((e,i)=>({i,t:e.lastUsed})).sort((a,b)=>a.t-b.t||a.i-b.i).slice(0,Math.max(0,entries.length-capacity)).map(e=>e.i));return entries.filter((_,i)=>!victims.has(i)); }",
+    "baseline": "export function evictLRU(...args) { throw new Error(\"Not implemented\"); }",
+    "mutants": [
+      {
+        "name": "boundary-or-contract-regression",
+        "source": "export function evictLRU(entries, capacity) { return entries.slice(-capacity); }"
+      }
+    ],
+    "checks": [
+      {
+        "args": [
+          [
+            {
+              "id": "a",
+              "lastUsed": 3
+            },
+            {
+              "id": "b",
+              "lastUsed": 1
+            },
+            {
+              "id": "c",
+              "lastUsed": 2
+            }
+          ],
+          2
+        ],
+        "expected": [
+          {
+            "id": "a",
+            "lastUsed": 3
+          },
+          {
+            "id": "c",
+            "lastUsed": 2
+          }
+        ]
+      },
+      {
+        "args": [
+          [
+            {
+              "id": "a",
+              "lastUsed": 1
+            },
+            {
+              "id": "b",
+              "lastUsed": 1
+            }
+          ],
+          1
+        ],
+        "expected": [
+          {
+            "id": "b",
+            "lastUsed": 1
+          }
+        ]
+      },
+      {
+        "args": [
+          [
+            {
+              "id": "a",
+              "lastUsed": 1
+            }
+          ],
+          0
+        ],
+        "expected": []
+      },
+      {
+        "args": [
+          [],
+          3
+        ],
+        "expected": []
+      },
+      {
+        "args": [
+          [
+            {
+              "id": "a",
+              "lastUsed": 0
+            }
+          ],
+          2
+        ],
+        "expected": [
+          {
+            "id": "a",
+            "lastUsed": 0
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "C03",
+    "project": "cache-kit",
+    "name": "cacheKey",
+    "prompt": "Generate an unambiguous cache key for a namespace string and an ID string or finite number using JSON.stringify([namespace, typeof id, id]). Preserve Unicode and distinguish numeric IDs from strings.",
+    "reference": "export function cacheKey(namespace, id) { return JSON.stringify([namespace,typeof id,id]); }",
+    "baseline": "export function cacheKey(...args) { throw new Error(\"Not implemented\"); }",
+    "mutants": [
+      {
+        "name": "boundary-or-contract-regression",
+        "source": "export function cacheKey(namespace, id) { return namespace+\":\"+id; }"
+      }
+    ],
+    "checks": [
+      {
+        "args": [
+          "a:b",
+          "c"
+        ],
+        "expected": "[\"a:b\",\"string\",\"c\"]"
+      },
+      {
+        "args": [
+          "a",
+          "b:c"
+        ],
+        "expected": "[\"a\",\"string\",\"b:c\"]"
+      },
+      {
+        "args": [
+          "ñ",
+          1
+        ],
+        "expected": "[\"ñ\",\"number\",1]"
+      },
+      {
+        "args": [
+          "ñ",
+          "1"
+        ],
+        "expected": "[\"ñ\",\"string\",\"1\"]"
+      },
+      {
+        "args": [
+          "",
+          ""
+        ],
+        "expected": "[\"\",\"string\",\"\"]"
+      }
+    ]
+  },
+  {
+    "id": "P01",
+    "project": "config-kit",
+    "name": "parseDuration",
+    "prompt": "Parse a full ASCII nonnegative integer followed by ms, s, m or h to safe integer milliseconds. No whitespace, decimal, signs or trailing characters. Return null for other types, invalid syntax or unsafe results. Leading zeroes are allowed.",
+    "reference": "export function parseDuration(value) { if(typeof value!==\"string\")return null;const m=/^([0-9]+)(ms|s|m|h)$/.exec(value);if(!m||m[0]!==value)return null;const n=Number(m[1])*({ms:1,s:1000,m:60000,h:3600000}[m[2]]);return Number.isSafeInteger(n)?n:null; }",
+    "baseline": "export function parseDuration(...args) { throw new Error(\"Not implemented\"); }",
+    "mutants": [
+      {
+        "name": "boundary-or-contract-regression",
+        "source": "export function parseDuration(value) { return parseInt(value,10)*1000; }"
+      }
+    ],
+    "checks": [
+      {
+        "args": [
+          "12ms"
+        ],
+        "expected": 12
+      },
+      {
+        "args": [
+          "2s"
+        ],
+        "expected": 2000
+      },
+      {
+        "args": [
+          "3m"
+        ],
+        "expected": 180000
+      },
+      {
+        "args": [
+          "1h"
+        ],
+        "expected": 3600000
+      },
+      {
+        "args": [
+          "00s"
+        ],
+        "expected": 0
+      },
+      {
+        "args": [
+          "1s\n"
+        ],
+        "expected": null
+      },
+      {
+        "args": [
+          "1.5s"
+        ],
+        "expected": null
+      },
+      {
+        "args": [
+          "-1s"
+        ],
+        "expected": null
+      },
+      {
+        "args": [
+          " 1s"
+        ],
+        "expected": null
+      },
+      {
+        "args": [
+          "9007199254740992ms"
+        ],
+        "expected": null
+      },
+      {
+        "args": [
+          1
+        ],
+        "expected": null
+      }
+    ]
+  },
+  {
+    "id": "P02",
+    "project": "config-kit",
+    "name": "parseBoolean",
+    "prompt": "Parse only string true/false (case insensitive, trimmed), or string 1/0. For all other inputs return the supplied fallback boolean, without truthiness coercion.",
+    "reference": "export function parseBoolean(value, fallback) { if(typeof value!==\"string\")return fallback;const s=value.trim().toLowerCase();return s===\"true\"||s===\"1\"?true:s===\"false\"||s===\"0\"?false:fallback; }",
+    "baseline": "export function parseBoolean(...args) { throw new Error(\"Not implemented\"); }",
+    "mutants": [
+      {
+        "name": "boundary-or-contract-regression",
+        "source": "export function parseBoolean(value, fallback) { return Boolean(value); }"
+      }
+    ],
+    "checks": [
+      {
+        "args": [
+          " FALSE ",
+          true
+        ],
+        "expected": false
+      },
+      {
+        "args": [
+          "1",
+          false
+        ],
+        "expected": true
+      },
+      {
+        "args": [
+          "0",
+          true
+        ],
+        "expected": false
+      },
+      {
+        "args": [
+          "TrUe",
+          false
+        ],
+        "expected": true
+      },
+      {
+        "args": [
+          "yes",
+          false
+        ],
+        "expected": false
+      },
+      {
+        "args": [
+          "",
+          true
+        ],
+        "expected": true
+      },
+      {
+        "args": [
+          false,
+          true
+        ],
+        "expected": true
+      },
+      {
+        "args": [
+          null,
+          false
+        ],
+        "expected": false
+      }
+    ]
+  },
+  {
+    "id": "P03",
+    "project": "config-kit",
+    "name": "retryDelay",
+    "prompt": "Given {attempt, baseMs, capMs}, return min(capMs, baseMs * 2**attempt). All three inputs must be finite nonnegative safe integers, otherwise return null. Exponent overflow still returns the finite cap; a zero base always returns zero.",
+    "reference": "export function retryDelay({attempt,baseMs,capMs}) { if(![attempt,baseMs,capMs].every(n=>Number.isSafeInteger(n)&&n>=0))return null;if(baseMs===0)return 0;return Math.min(capMs,baseMs*2**attempt); }",
+    "baseline": "export function retryDelay(...args) { throw new Error(\"Not implemented\"); }",
+    "mutants": [
+      {
+        "name": "boundary-or-contract-regression",
+        "source": "export function retryDelay({attempt,baseMs,capMs}) { return baseMs*2**attempt; }"
+      }
+    ],
+    "checks": [
+      {
+        "args": [
+          {
+            "attempt": 0,
+            "baseMs": 100,
+            "capMs": 1000
+          }
+        ],
+        "expected": 100
+      },
+      {
+        "args": [
+          {
+            "attempt": 3,
+            "baseMs": 100,
+            "capMs": 500
+          }
+        ],
+        "expected": 500
+      },
+      {
+        "args": [
+          {
+            "attempt": 1024,
+            "baseMs": 1,
+            "capMs": 99
+          }
+        ],
+        "expected": 99
+      },
+      {
+        "args": [
+          {
+            "attempt": 1024,
+            "baseMs": 0,
+            "capMs": 99
+          }
+        ],
+        "expected": 0
+      },
+      {
+        "args": [
+          {
+            "attempt": -1,
+            "baseMs": 100,
+            "capMs": 1000
+          }
+        ],
+        "expected": null
+      },
+      {
+        "args": [
+          {
+            "attempt": 1.5,
+            "baseMs": 1,
+            "capMs": 10
+          }
+        ],
+        "expected": null
+      },
+      {
+        "args": [
+          {
+            "attempt": 2,
+            "baseMs": 10,
+            "capMs": 0
+          }
+        ],
+        "expected": 0
+      }
+    ]
+  }
+]
