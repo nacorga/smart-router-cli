@@ -5,6 +5,8 @@ import type { Backend, Model, Result, StageKind, Usage } from './types.js';
 import { permissions, stagePermissions, systemPolicy, forbiddenCommand } from './safety.js';
 export type Approve = (description: string) => Promise<boolean>;
 export class OpenCodeBackend implements Backend {
+  identity = 'opencode';
+  billing = 'api' as const;
   constructor(readonly client: OpencodeClient, readonly directory: string, readonly approve: Approve, private shutdown: () => void | Promise<void> = () => {}) {}
   static async start(directory: string, approve: Approve, options?: { openrouterBaseURL: string }) {
     // Only a dedicated server with wrapper-owned policy is used; arbitrary servers may weaken it.

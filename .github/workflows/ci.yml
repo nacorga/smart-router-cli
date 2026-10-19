@@ -57,6 +57,7 @@ jobs:
       - run: npm run smoke:controls
       - run: npm run smoke:validation
       - run: npm run smoke:budget
+      - run: npm run smoke:continuity
       - run: npm run smoke:tty
       - name: Check tracked files are unchanged
         run: git diff --exit-code && test -z "$(git ls-files --others --exclude-standard)"

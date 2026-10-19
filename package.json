@@ -1,6 +1,6 @@
 {
   "name": "smart-router-cli",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "private": true,
   "type": "module",
   "description": "Explainable model routing for local OpenCode sessions",
@@ -32,9 +32,15 @@
     "audit:public": "node scripts/audit-public.mjs",
     "prepack": "npm run build",
     "reliability": "npm run build && node dist/reliability.js",
-    "test:reliability": "vitest run tests/reliability.test.ts tests/reliability-faults.test.ts"
+    "test:reliability": "vitest run tests/reliability.test.ts tests/reliability-faults.test.ts tests/reliability-continuity.test.ts",
+    "smoke:continuity": "npm run build && node scripts/continuity-smoke.mjs",
+    "pilot:continuity": "npm run build && node dist/continuity-pilot.js",
+    "smoke:codex-policy": "npm run build && node scripts/codex-policy-smoke.mjs",
+    "smoke:claude-policy": "npm run build && node scripts/claude-policy-smoke.mjs",
+    "pilot:lifecycle": "npm run build && node dist/continuity-lifecycle-pilot.js"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.303",
     "@opencode-ai/sdk": "1.19.3",
     "opencode-ai": "1.19.3"
   },
@@ -55,7 +61,8 @@
     "SECURITY.md",
     "CONTRIBUTING.md",
     "benchmark/historical-summary.json",
-    "benchmark/reliability/"
+    "benchmark/reliability/",
+    "scripts/continuity-tty.py"
   ],
   "license": "MIT",
   "author": "nacorga",

@@ -31,7 +31,11 @@ export class Store {
     const path = this.path(task.id); const temp = `${path}.${randomUUID()}.tmp`;
     await writeFile(temp, JSON.stringify(task, null, 2), { mode: 0o600 }); await rename(temp, path);
   }
-  async get(id: string): Promise<Task> { return JSON.parse(await readFile(this.path(id), 'utf8')); }
+  async get(id: string): Promise<Task> {
+    const task = JSON.parse(await readFile(this.path(id), 'utf8'));
+    if (task.schemaVersion !== undefined && task.schemaVersion !== 2) throw new Error('Unsupported checkpoint version');
+    return task;
+  }
   async list(project?: string): Promise<Task[]> {
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     const tasks: Task[] = [];
@@ -44,7 +48,7 @@ export async function lockProject(project: string, root = stateRoot()): Promise<
   const path = join(root, `${createHash('sha256').update(await realpath(project)).digest('hex')}.lock`);
   let f;
   try { f = await open(path, 'wx', 0o600); } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new Error(`Project locked by another writer or an interrupted run. Inspect ${path}; remove the lock only after verifying that OpenCode is idle.`);
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new Error(`Project locked by another writer or an interrupted run. Inspect ${path}; remove the lock only after verifying that the previous backend and its owned commands have stopped.`);
     throw e;
   }
   await f.writeFile(JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() })); await f.close();
