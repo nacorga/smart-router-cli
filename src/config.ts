@@ -10,6 +10,7 @@ export const defaults: Config = {
 export function validateConfig(raw: unknown): Config {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid configuration');
   const c = raw as Config;
+  validateDestinations(c);
   if (!['auto', 'manual'].includes(c.mode) || typeof c.provider !== 'string' || !c.provider.trim()) throw new Error('Invalid mode/provider');
   for (const t of tiers) {
     if (typeof c.models?.[t] !== 'string' || !c.models[t].trim()) throw new Error(`Missing models.${t}`);
@@ -33,5 +34,26 @@ export async function loadConfig(project: string, explicit?: string): Promise<Co
   return validateConfig(c);
 }
 export function requireConfigured(c: Config) {
+  if (c.destinations) { for (const d of c.destinations) if (tiers.some(t => /[<>]/.test(d.models[t]))) throw new Error('Configure explicit destination models before inference'); return; }
   if (tiers.some(t => /[<>]/.test(c.models[t]))) throw new Error('Configure models.fast/balanced/deep: placeholders cannot make requests. Use smart --init.');
+}
+
+function validateDestinations(c: Config) {
+  if (c.schemaVersion !== undefined && c.schemaVersion !== 2) throw new Error('Unsupported configuration version');
+  if (c.destinations === undefined) { if (c.schemaVersion === 2) throw new Error('Version 2 requires destinations'); return; }
+  if (c.schemaVersion !== 2 || !Array.isArray(c.destinations) || !c.destinations.length) throw new Error('Version 2 requires a nonempty destination chain');
+  const ids = new Set<string>();
+  for (const d of c.destinations) {
+    if (!d || !/^[a-z][a-z0-9-]{0,63}$/.test(d.id) || ids.has(d.id)) throw new Error('Invalid or duplicate destination ID');
+    ids.add(d.id);
+    if (!['codex', 'claude', 'opencode'].includes(d.backend) || d.billing !== (d.backend === 'opencode' ? 'api' : 'subscription')) throw new Error('Invalid backend/billing combination');
+    for (const t of tiers) if (typeof d.models?.[t] !== 'string' || !d.models[t].trim()) throw new Error('Missing destination model');
+    if (d.executable !== undefined && (typeof d.executable !== 'string' || !d.executable.trim())) throw new Error('Invalid executable');
+  }
+}
+export function subscriptionTemplate(): Config {
+  return { ...structuredClone(defaults), schemaVersion: 2, destinations: ['codex', 'claude'].map(backend => ({
+    id: backend, backend: backend as 'codex' | 'claude', billing: 'subscription',
+    models: { fast: '<FAST_MODEL_ID>', balanced: '<BALANCED_MODEL_ID>', deep: '<DEEP_MODEL_ID>' },
+  })) };
 }

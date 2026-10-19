@@ -25,7 +25,7 @@ node dist/cli.js --demo "Implement a parser"
 For a packaged installation, download the `.tgz` and checksum from [Releases](https://github.com/nacorga/smart-router-cli/releases), verify the checksum, then install the local file:
 
 ```sh
-npm install --global ./smart-router-cli-0.1.0-alpha.1.tgz
+npm install --global ./smart-router-cli-0.1.0-alpha.2.tgz
 smart --help
 ```
 
@@ -85,7 +85,7 @@ Read [configuration](docs/CONFIGURATION.md), [security and privacy](SECURITY.md)
 
 ## Reproduce reliability checks
 
-Unreleased source tooling adds ten controlled tasks across three fixture projects, an offline 60-slot rehearsal, and local failure injection. These are not results on real repositories. See the [reliability protocol](docs/RELIABILITY.md) for commands, frozen criteria, reporting, and the separately gated paid campaign.
+The reliability tooling adds ten controlled tasks across three fixture projects, an offline 60-slot rehearsal, and local failure injection. These are not results on real repositories. See the [reliability protocol](docs/RELIABILITY.md) for commands, frozen criteria, reporting, and the separately gated paid campaign.
 
 ## Develop and contribute
 
@@ -102,3 +102,9 @@ npm run smoke:validation
 Ordinary tests and smokes need no API credentials and make no paid model requests. Native smokes use scripted providers on loopback and isolated state; they do not measure model quality. See [CONTRIBUTING](CONTRIBUTING.md), the [roadmap](docs/ROADMAP.md), and the [demo](docs/DEMO.md).
 
 Useful feedback includes a reproducible task, expected behavior, version/platform, and a sanitized failure report. Report vulnerabilities privately as described in SECURITY. Do not attach keys, native histories, or confidential source code.
+
+## Experimental subscription continuity
+
+An opt-in version 2 configuration adds sequential destinations and private continuation checkpoints. Existing OpenCode/OpenRouter configurations are unchanged. Start with `smart --init --subscriptions`, configure native models, and inspect `smart --backends` without inference.
+
+**Experimental continuity:** both adapters use closed Smart tools and have deterministic process-contract coverage, including bidirectional handoffs. An authorized real pilot passed for Codex alone, Claude alone, and a deliberate Codex → Claude handoff on one isolated addition fixture, preserving existing work and independently validating the result. Further real fixture checks passed for the reverse handoff, cross-process continuation, cancellation during validation, and permission rejection in both backends. Real quota exhaustion and broader real tasks remain unvalidated. Read [continuity status, permissions, and recovery](docs/CONTINUITY.md) before enabling this experimental route.

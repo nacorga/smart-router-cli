@@ -15,3 +15,9 @@ Put OPENROUTER_API_KEY in the environment or the target project's .env. Only tha
 smart --sessions, --resume, and --export inspect metadata without inference. In interactive mode /resume loads a checkpoint; a subsequent explicit task continues only after confirming that the native session is idle and belongs to the project. Interrupted tools are never replayed automatically.
 
 Exit status is nonzero for failed, blocked, or cancelled real tasks. An unverified edit is explicitly labeled and must not be treated as a verified result. Approval accepts yes (and si/sí for compatibility); other replies reject the operation.
+
+## Version 2 subscription destinations
+
+`smart --init --subscriptions` writes an opt-in Codex → Claude template. Each destination declares `id`, `backend`, `billing`, and explicit `models.fast/balanced/deep`; `executable` optionally selects a trusted local CLI. Only `opencode` accepts `api` billing; `codex` and `claude` require `subscription`. Destination IDs are unique. Normal user/project configuration precedence still applies, and a destination array is replaced as a whole.
+
+Legacy model fallbacks are not reused across destinations. The subscription template does not add OpenRouter to the chain. `--plan` lists ordered candidates without verifying availability. `--backends` diagnoses native authentication and policy compatibility without inference and quota observations. See [continuity](CONTINUITY.md) before enabling native execution or storing private handoff content.
