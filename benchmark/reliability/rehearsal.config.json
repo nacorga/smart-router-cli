@@ -1,0 +1,17 @@
+{
+  "mode": "auto",
+  "provider": "openrouter",
+  "models": {
+    "fast": "openrouter/smart-fixture-fast",
+    "balanced": "openrouter/smart-fixture-balanced",
+    "deep": "openrouter/smart-fixture-deep"
+  },
+  "limits": {
+    "maxCostUsd": 0.1,
+    "maxModelCalls": 16,
+    "maxEscalationsPerStage": 1,
+    "repairAttemptsBeforeEscalation": 1,
+    "maxInfrastructureRetries": 1
+  },
+  "minContext": 16000
+}

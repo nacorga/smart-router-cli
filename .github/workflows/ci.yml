@@ -31,6 +31,7 @@ jobs:
       - run: npm run test:permissions
       - run: npm run typecheck
       - run: npm run build
+      - run: npm run reliability -- --verify-fixtures
       - run: npm run audit:public
       - run: npm run smoke:package
       - name: Check tracked files are unchanged
