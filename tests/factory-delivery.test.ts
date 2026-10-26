@@ -112,3 +112,24 @@ it('does not report a created PR as verified when its returned head differs', as
     expect(task.delivery?.pr).toBeUndefined(); expect(f.github.creates).toHaveLength(1);
   } finally { await f.cleanup(); }
 });
+it('never replays an uncertain push whose remote ref is still absent', async () => {
+  const f = await remoteFixture();
+  try {
+    const task = await new DeliveryManager(f.store, async d => !d.startsWith('Push ONE'), f.github).deliver(f.task.id);
+    task.state = 'DELIVERING'; task.operation = { id: 'pending-push', kind: 'push' }; await f.store.save(task);
+    let pushes = 0;
+    const result = await new DeliveryManager(f.store, async d => { if (d.startsWith('Push ONE')) pushes++; return true; }, f.github).deliver(task.id);
+    expect(result.operation).toEqual({ id: 'pending-push', kind: 'push' }); expect(result.state).toBe('DELIVERING'); expect(pushes).toBe(0); expect(f.github.creates).toHaveLength(0);
+    expect(result.reason).toBe('INSPECTION_REQUIRED_PUSH_RESULT_UNKNOWN');
+  } finally { await f.cleanup(); }
+});
+it('retains an uncertain publication journal if origin disappears', async () => {
+  const f = await remoteFixture();
+  try {
+    const task = await new DeliveryManager(f.store, async d => !d.startsWith('Push ONE'), f.github).deliver(f.task.id);
+    task.state = 'DELIVERING'; task.operation = { id: 'pending-push', kind: 'push' }; await f.store.save(task);
+    await git(f.task.workspace!.path, ['remote', 'remove', 'origin']);
+    const result = await new DeliveryManager(f.store, async () => true, f.github).deliver(task.id);
+    expect(result.operation?.id).toBe('pending-push'); expect(result.state).toBe('DELIVERING'); expect(result.reason).toBe('INSPECTION_REQUIRED_REMOTE_UNAVAILABLE');
+  } finally { await f.cleanup(); }
+});

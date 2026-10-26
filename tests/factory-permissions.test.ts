@@ -20,3 +20,16 @@ it('rejects state inside the repository before persisting private objectives', a
     expect(await readdir(unsafe.root)).toEqual([]);
   } finally { await f.cleanup(); }
 });
+it('keeps host delivery authentication available to Git without exposing it to providers', async () => {
+  const { GhClient } = await import('../src/factory/delivery.js');
+  const { hostEnvironment } = await import('../src/factory/workspace.js');
+  const previousToken = process.env.GH_TOKEN, previousAgent = process.env.SSH_AUTH_SOCK;
+  try {
+    process.env.GH_TOKEN = 'fixture-host-delivery-only'; process.env.SSH_AUTH_SOCK = '/fixture/owned-agent';
+    expect(new GhClient().gitEnvironment()).toMatchObject({ GH_TOKEN: 'fixture-host-delivery-only', SSH_AUTH_SOCK: '/fixture/owned-agent' });
+    expect(hostEnvironment().GH_TOKEN).toBeUndefined(); expect(subscriptionEnvironment().GH_TOKEN).toBeUndefined();
+  } finally {
+    if (previousToken === undefined) delete process.env.GH_TOKEN; else process.env.GH_TOKEN = previousToken;
+    if (previousAgent === undefined) delete process.env.SSH_AUTH_SOCK; else process.env.SSH_AUTH_SOCK = previousAgent;
+  }
+});

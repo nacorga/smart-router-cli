@@ -12,7 +12,7 @@ export interface EngineEvent {
   status?: Task['status']; stage?: string; stageStatus?: Task['stages'][number]['status']; tier?: string;
 }
 export interface EngineInput {
-  objective: string; projectPath: string; config: Config; approvals?: ApprovalProvider;
+  objective: string; context?: string; projectPath: string; config: Config; approvals?: ApprovalProvider;
   onEvent?: (event: EngineEvent) => void;
 }
 export interface EngineHandle { taskId: string; result: Promise<Task>; cancel(): Promise<boolean> }
@@ -66,12 +66,12 @@ export class SmartEngine implements ExecutionEngine {
           }
         }
       }
-    }(parent.root);
+    }(parent.root, parent.lockRoot);
     let backend: Backend | undefined;
     const controller = config.destinations
       ? new ContinuityController(d => this.backendFactory(d, project, approve), config, store, () => {})
       : new Controller(backend = await this.backendFactory({ id: 'opencode', backend: 'opencode', billing: 'api', models: config.models }, project, approve), config, store, () => {});
-    const result = (continuing && controller instanceof ContinuityController ? controller.continue(continuing, project) : controller.run(input.objective, project))
+    const result = (continuing && controller instanceof ContinuityController ? controller.continue(continuing, project) : controller.run(input.objective, project, input.context))
       .then(task => { emit({ type: 'result', status: task.status }); return task; })
       .finally(async () => { if (controller instanceof ContinuityController) await controller.close(); await backend?.close(); });
     taskId = await Promise.race([started, result.then(task => task.id)]);

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstat, readFile } from 'node:fs/promises';
 import { safeProjectPath, secretPath } from '../continuity-state.js';
-import { git } from './workspace.js';
+import { git, verifyWorkspace } from './workspace.js';
 import { matches, type TaskSpec } from './task-spec.js';
 import type { FactoryTask } from './state.js';
 
@@ -15,7 +15,7 @@ export function scopeAllows(spec: TaskSpec, name: string) {
 }
 /** Names are inspected before content; excluded secrets are never read. */
 export async function scopeCheck(task: FactoryTask) {
-  const w = task.workspace!;
+  const w = task.workspace!; await verifyWorkspace(w);
   if ((await git(w.path, ['rev-parse', 'HEAD'])).trim() !== (task.delivery?.commit ?? w.baseSha)) throw new Error('WORKSPACE_HEAD_CHANGED');
   if ((await git(w.path, ['symbolic-ref', '--short', 'HEAD'])).trim() !== w.branch) throw new Error('WORKSPACE_BRANCH_CHANGED');
   if ((await git(w.path, ['ls-files', '--unmerged'])).trim()) throw new Error('UNMERGED_INDEX');
@@ -41,11 +41,11 @@ export async function contentHash(root: string) {
   const names = [...new Set((await git(root, ['ls-files', '--cached', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean))].sort();
   if (names.length > 20000) throw new Error('SNAPSHOT_TOO_LARGE');
   for (const name of names) {
-    if (secretPath(name)) { hash.update(name + ':excluded'); continue; }
+    if (secretPath(name)) { hash.update(JSON.stringify([name, 'excluded'])); continue; }
     try {
       const path = await safeProjectPath(root, name), info = await lstat(path);
       if (!info.isFile() || (bytes += info.size) > 64 * 1024 * 1024) throw new Error('SNAPSHOT_UNAVAILABLE');
-      hash.update(name + '\0' + (info.mode & 0o111) + '\0').update(await readFile(path)).update('\0');
+      hash.update(JSON.stringify([name, info.mode & 0o111, createHash('sha256').update(await readFile(path)).digest('hex')]));
     } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; /* deleted files absent from content tree */ }
   }
   return hash.digest('hex');

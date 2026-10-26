@@ -13,6 +13,7 @@ const exec = promisify(execFile);
 export interface PullRequest { url: string; head: string; base: string; draft: boolean; state: string }
 export interface GitHubClient {
   validateRepository(repository: string): void;
+  gitEnvironment?(): NodeJS.ProcessEnv;
   available(): Promise<boolean>;
   find(repository: string, branch: string, base: string): Promise<PullRequest[]>;
   create(input: { repository: string; branch: string; base: string; title: string; body: string; draft: true }): Promise<string>;
@@ -24,6 +25,10 @@ export class GhClient implements GitHubClient {
     if (!match) throw new Error('GITHUB_REMOTE_REQUIRED'); return match[1]!;
   }
   validateRepository(repository: string) { this.repo(repository); }
+  gitEnvironment(): NodeJS.ProcessEnv {
+    // Host Git credential helpers/SSH agent only, after delivery approval.
+    return Object.fromEntries(['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'SSH_AUTH_SOCK', 'XDG_CONFIG_HOME', 'GH_CONFIG_DIR'].flatMap(key => process.env[key] ? [[key, process.env[key]!]] : []));
+  }
   private async gh(args: string[]) { return (await exec('gh', args, { timeout: 30000, maxBuffer: 1024 * 1024 })).stdout.trim(); }
   async available() { try { await this.gh(['auth', 'status', '--hostname', 'github.com']); return true; } catch { return false; } }
   async find(repository: string, branch: string, base: string): Promise<PullRequest[]> {
@@ -50,7 +55,7 @@ export class DeliveryManager {
     try {
       task = await this.store.get(id);
       if (!['AWAITING_DELIVERY_APPROVAL', 'READY_LOCAL', 'DRAFT_PR_CREATED', 'DELIVERING'].includes(task.state)) throw new Error('Validated delivery checkpoint required');
-      const w = task.workspace!; unlockProject = await lockProject(w.path, join(this.store.root, 'engine'));
+      const w = task.workspace!; unlockProject = await lockProject(w.path, this.store.projectLockRoot);
       await qualityGate(task);
       if (task.state === 'DRAFT_PR_CREATED') return task;
       if (task.operation && !['push', 'draft-pr'].includes(task.operation.kind)) throw new Error('INSPECTION_REQUIRED_NO_REPLAY');
@@ -66,12 +71,13 @@ export class DeliveryManager {
         const commit = (await git(w.path, ['rev-parse', 'HEAD'])).trim();
         task.delivery = { commit }; task.operation = undefined; await this.store.save(task); await qualityGate(task);
       }
+      if (task.operation && !task.spec.delivery.draftPR) throw new Error('DELIVERY_TARGET_CHANGED');
       if (!task.spec.delivery.draftPR) { task.reason = 'LOCAL_COMMIT_READY'; await this.store.transition(task, 'READY_LOCAL'); return task; }
       let url: string;
       try {
         url = (await git(w.path, ['remote', 'get-url', '--push', 'origin'])).trim();
         if ((await git(w.path, ['remote', 'get-url', 'origin'])).trim() !== url || /[\x00-\x20]/.test(url) || url.startsWith('-')) throw new Error('REMOTE_TARGET_AMBIGUOUS');
-      } catch { task.reason = 'REMOTE_NOT_CONFIGURED'; await this.store.transition(task, 'READY_LOCAL'); return task; }
+      } catch { if (task.operation) throw new Error('INSPECTION_REQUIRED_REMOTE_UNAVAILABLE'); task.reason = 'REMOTE_NOT_CONFIGURED'; await this.store.transition(task, 'READY_LOCAL'); return task; }
       if (task.delivery!.url && (task.delivery!.url !== url || task.delivery!.base !== task.spec.repository.baseRef)) throw new Error('DELIVERY_TARGET_CHANGED');
       this.github.validateRepository(url);
       const base = task.spec.repository.baseRef, commit = task.delivery!.commit!;
@@ -81,7 +87,7 @@ export class DeliveryManager {
       }
       if (!await this.github.available()) { if (!task.operation) { task.reason = 'GITHUB_AUTH_OR_CLIENT_UNAVAILABLE'; await this.store.transition(task, 'READY_LOCAL'); } return task; }
       await this.verifyTarget(task, url); await qualityGate(task);
-      const remote = (await git(w.path, ['ls-remote', '--heads', url, `refs/heads/${w.branch}`])).trim().split(/\s/)[0] || undefined;
+      const remote = (await this.remoteGit(w.path, ['ls-remote', '--heads', url, `refs/heads/${w.branch}`])).trim().split(/\s/)[0] || undefined;
       const existing = await this.github.find(url, w.branch, base);
       if (existing.length > 1 || existing.some(pr => pr.head !== commit || pr.base !== base || !pr.draft || pr.state !== 'OPEN')) throw new Error('REMOTE_PR_CONFLICT_INSPECT_REQUIRED');
       if (existing.length) {
@@ -89,6 +95,7 @@ export class DeliveryManager {
         task.delivery!.pr = existing[0]!.url; task.delivery!.pushed = true; task.operation = undefined;
         await this.store.transition(task, 'DRAFT_PR_CREATED'); return task;
       }
+      if (task.operation?.kind === 'push' && remote !== commit) throw new Error('INSPECTION_REQUIRED_PUSH_RESULT_UNKNOWN');
       if (remote && remote !== commit) throw new Error('REMOTE_HEAD_CONFLICT');
       // A confirmed remote read reconciles a previous uncertain push/PR, without replaying it.
       if (task.operation?.kind === 'draft-pr') throw new Error('INSPECTION_REQUIRED_PR_RESULT_UNKNOWN');
@@ -97,8 +104,8 @@ export class DeliveryManager {
         if (!await approval(this.store, task, this.approve, `Push ONE commit ${commit} to ${url} refs/heads/${w.branch}, without force; base ${base}?`)) { task.reason = 'PUSH_DENIED'; await this.store.transition(task, 'READY_LOCAL'); return task; }
         await qualityGate(task); await this.verifyTarget(task, url);
         await this.store.transition(task, 'DELIVERING', 'push');
-        await git(w.path, ['-c', 'push.followTags=false', 'push', '--porcelain', url, `${commit}:refs/heads/${w.branch}`]);
-        if (!(await git(w.path, ['ls-remote', '--heads', url, `refs/heads/${w.branch}`])).startsWith(commit + '\t')) throw new Error('PUSH_UNCONFIRMED');
+        await this.remoteGit(w.path, ['-c', 'push.followTags=false', 'push', '--porcelain', url, `${commit}:refs/heads/${w.branch}`]);
+        if (!(await this.remoteGit(w.path, ['ls-remote', '--heads', url, `refs/heads/${w.branch}`])).startsWith(commit + '\t')) throw new Error('PUSH_UNCONFIRMED');
         task.delivery!.pushed = true; task.operation = undefined; await this.store.save(task);
       }
       const body = deliveryBody(task);
@@ -106,25 +113,28 @@ export class DeliveryManager {
       await qualityGate(task); await this.verifyTarget(task, url);
       const latest = await this.github.find(url, w.branch, base);
       if (latest.length) throw new Error('REMOTE_PR_CHANGED_INSPECT_REQUIRED');
-      if (!(await git(w.path, ['ls-remote', '--heads', url, `refs/heads/${w.branch}`])).startsWith(commit + '\t')) throw new Error('REMOTE_HEAD_CHANGED');
+      if (!(await this.remoteGit(w.path, ['ls-remote', '--heads', url, `refs/heads/${w.branch}`])).startsWith(commit + '\t')) throw new Error('REMOTE_HEAD_CHANGED');
       await this.store.transition(task, 'DELIVERING', 'draft-pr');
       const pr = await this.github.create({ repository: url, branch: w.branch, base, title: task.spec.title, body, draft: true });
       const confirmed = await this.github.find(url, w.branch, base);
       if (confirmed.length !== 1 || confirmed[0]!.url !== pr || confirmed[0]!.head !== commit || confirmed[0]!.base !== base || !confirmed[0]!.draft || confirmed[0]!.state !== 'OPEN') throw new Error('DRAFT_PR_UNCONFIRMED');
-      if (!(await git(w.path, ['ls-remote', '--heads', url, `refs/heads/${w.branch}`])).startsWith(commit + '\t')) throw new Error('REMOTE_HEAD_CHANGED');
+      if (!(await this.remoteGit(w.path, ['ls-remote', '--heads', url, `refs/heads/${w.branch}`])).startsWith(commit + '\t')) throw new Error('REMOTE_HEAD_CHANGED');
       task.delivery!.pr = pr; task.operation = undefined;
       task.events.push({ taskId: id, timestamp: new Date().toISOString(), type: 'result', operationId: randomUUID() });
       await this.store.transition(task, 'DRAFT_PR_CREATED'); return task;
     } catch (error) {
       retainLocks = !!(error as { killed?: boolean }).killed;
       if (!task) throw new Error('Delivery task unavailable');
-      task.reason = task.operation ? 'INSPECTION_REQUIRED_REMOTE_OR_LOCAL_RESULT_UNKNOWN' : 'DELIVERY_BLOCKED_INSPECT_REQUIRED';
+      if (!['AWAITING_DELIVERY_APPROVAL', 'READY_LOCAL', 'DRAFT_PR_CREATED', 'DELIVERING'].includes(task.state)) throw new Error('Validated delivery checkpoint required');
+      const reason = error instanceof Error && /^[A-Z][A-Z0-9_]+$/.test(error.message) ? error.message : undefined;
+      task.reason = reason ?? (task.operation ? 'INSPECTION_REQUIRED_REMOTE_OR_LOCAL_RESULT_UNKNOWN' : 'DELIVERY_BLOCKED_INSPECT_REQUIRED');
       if (!task.operation) await this.store.transition(task, 'BLOCKED'); else await this.store.save(task); return task;
     } finally {
       // Publication uncertainty is reconciled by deliver's read-only remote checks on a later call.
       if (!retainLocks) { await unlockProject?.(); await unlock(); }
     }
   }
+  private remoteGit(root: string, args: string[]) { return git(root, args, this.github.gitEnvironment?.()); }
   private async verifyTarget(task: FactoryTask, expected: string) {
     if ((await git(task.workspace!.path, ['remote', 'get-url', '--push', 'origin'])).trim() !== expected || (await git(task.workspace!.path, ['remote', 'get-url', 'origin'])).trim() !== expected) throw new Error('DELIVERY_TARGET_CHANGED');
   }

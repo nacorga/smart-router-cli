@@ -19,7 +19,7 @@ export async function demo(approve: ApprovalProvider) {
   await git(repo, ['add', '--', 'index.mjs', 'test.mjs']); await git(repo, ['commit', '-m', 'fixture base']);
   const store = new FactoryStore(join(root, 'state')), config = structuredClone(defaults);
   config.models = { fast: 'fixture/fast', balanced: 'fixture/balanced', deep: 'fixture/deep' };
-  const engine = new SmartEngine(new Store(join(store.root, 'engine')), async (_d, project, authorize) => ({
+  const engine = new SmartEngine(new Store(join(store.root, 'engine'), store.projectLockRoot), async (_d, project, authorize) => ({
     catalog: async () => Object.values(config.models).map(id => ({ id, tools: true, context: 64000 })), create: async () => 'offline', abort: async () => true, close() {},
     prompt: async (_id, _model, _prompt, stage) => {
       let denied = false;

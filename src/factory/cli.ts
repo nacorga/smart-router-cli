@@ -41,14 +41,14 @@ export async function main(args = process.argv.slice(2)) {
   try {
     if (command === 'demo') {
       if (id || specPath || configPath || run) throw new Error('demo takes no options');
-      const { demo } = await import('./demo.js'); console.log(JSON.stringify(await demo(approve), null, 2)); return;
+      const { demo } = await import('./demo.js'); const result = await demo(approve); console.log(JSON.stringify(result, null, 2)); if (result.state !== 'READY_LOCAL') process.exitCode = 1; return;
     }
     if (command === 'run') {
       if (!specPath || id) throw new Error('Use factory run --spec task.json');
       const spec = parseTaskSpec(JSON.parse(await readFile(resolve(specPath), 'utf8')));
       spec.repository.path = resolve(spec.repository.path);
       const config = await loadConfig(spec.repository.path, configPath);
-      const engine = new SmartEngine(new Store(join(store.root, 'engine')));
+      const engine = new SmartEngine(new Store(join(store.root, 'engine'), store.projectLockRoot));
       const factory = new Factory(store, engine, config, async description => description.startsWith('Authorize ONE Smart Router') && !run ? false : approve(description));
       const result = await factory.run(spec); console.log(JSON.stringify({ id: result.id, state: result.state, workspace: result.workspace?.path, reason: result.reason, originalChangesExcluded: result.workspace?.originalDirty }, null, 2));
       if (!['AWAITING_DELIVERY_APPROVAL', 'READY_LOCAL'].includes(result.state)) process.exitCode = 1;
@@ -56,11 +56,11 @@ export async function main(args = process.argv.slice(2)) {
     }
     if (!id || specPath) throw new Error('Task ID required; see --help');
     const task = await store.get(id);
-    const factory = new Factory(store, new SmartEngine(new Store(join(store.root, 'engine'))), command === 'continue' ? await loadConfig(task.workspace!.repository, configPath) : structuredClone(defaults), async description => description.startsWith('Authorize ONE Smart Router') && !run ? false : approve(description), task.mode);
+    const factory = new Factory(store, new SmartEngine(new Store(join(store.root, 'engine'), store.projectLockRoot)), command === 'continue' ? await loadConfig(task.workspace!.repository, configPath) : structuredClone(defaults), async description => description.startsWith('Authorize ONE Smart Router') && !run ? false : approve(description), task.mode);
     if (command === 'inspect') console.log(JSON.stringify(await factory.inspect(id), null, 2));
-    else if (command === 'status') { const t = await factory.inspect(id); console.log(JSON.stringify({ id: t.id, state: t.state, mode: t.mode, reason: t.reason, engineStatus: t.engineStatus, checks: t.checks.map(c => ({ status: c.status, exitCode: c.exitCode })), operation: t.operation?.kind, events: t.events }, null, 2)); }
+    else if (command === 'status') { const t = await factory.inspect(id); console.log(JSON.stringify({ id: t.id, state: t.state, mode: t.mode, reason: t.reason, engineStatus: t.engineStatus, engineNote: t.engineNote, checks: t.checks.map(c => ({ status: c.status, exitCode: c.exitCode })), operation: t.operation?.kind, events: t.events }, null, 2)); }
     else if (command === 'cancel') { const t = await factory.cancel(id); console.log(JSON.stringify({ id, state: t.state, reason: t.reason }, null, 2)); }
-    else if (command === 'continue') { const t = await factory.continue(id); console.log(JSON.stringify({ id, state: t.state, reason: t.reason }, null, 2)); }
+    else if (command === 'continue') { const t = await factory.continue(id); console.log(JSON.stringify({ id, state: t.state, reason: t.reason }, null, 2)); if (!['AWAITING_DELIVERY_APPROVAL', 'READY_LOCAL'].includes(t.state)) process.exitCode = 1; }
     else if (command === 'deliver') {
       const manager = new DeliveryManager(store, approve);
       console.log(JSON.stringify(await manager.preview(id), null, 2));

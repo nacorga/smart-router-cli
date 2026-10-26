@@ -21,15 +21,19 @@ const transitions: Record<WorkflowState, WorkflowState[]> = {
 export interface FactoryEvent { taskId: string; timestamp: string; type: 'transition' | 'approval-requested' | 'approval-granted' | 'approval-denied' | 'validation' | 'recovery' | 'result'; state?: WorkflowState; operationId: string }
 export interface FactoryTask {
   version: 1; mode: 'provider' | 'offline-fixture'; id: string; spec: TaskSpec; state: WorkflowState; workspace?: Workspace;
-  engineId?: string; engineStatus?: string; engineSummary?: { calls: number; apiSpentUsd: number | null; subscriptionCostUsd: null; unknownCost: boolean; usageRecords: number; stages: { kind: string; status: string; models: string[] }[] }; engineFingerprint?: string; checks: ValidationCheck[];
+  engineId?: string; engineStatus?: string; engineNote?: string; engineConfigHash?: string; engineSummary?: { calls: number; apiSpentUsd: number | null; subscriptionCostUsd: null; unknownCost: boolean; usageRecords: number; stages: { kind: string; status: string; models: string[] }[] }; engineFingerprint?: string; checks: ValidationCheck[];
   validatedHash?: string; events: FactoryEvent[]; approvals: { operationId: string; digest: string; granted: boolean }[];
   operation?: { id: string; kind: string }; reason?: string; pid: number; createdAt: string;
   delivery?: { commit?: string; pushed?: boolean; pr?: string; remote?: string; url?: string; base?: string };
 }
 export class FactoryStore {
-  readonly root: string;
-  constructor(root = join(stateRoot(), 'factory')) { this.root = canonicalHostPath(root); }
+  readonly root: string; readonly projectLockRoot: string;
+  constructor(root?: string, projectLockRoot?: string) {
+    this.root = canonicalHostPath(root ?? join(stateRoot(), 'factory'));
+    this.projectLockRoot = canonicalHostPath(projectLockRoot ?? (root === undefined ? stateRoot() : join(this.root, 'engine')));
+  }
   async init() {
+    await noSymlinks(this.root, true);
     await mkdir(this.root, { recursive: true, mode: 0o700 }); await noSymlinks(this.root);
     const info = await lstat(this.root);
     if (!info.isDirectory() || (info.mode & 0o077)) throw new Error('PRIVATE_STATE_PERMISSIONS_REQUIRED');

@@ -8,10 +8,10 @@ import { lockProject } from '../state.js';
 import { projectFingerprint } from '../continuity-state.js';
 import { FactoryStore, type FactoryTask } from './state.js';
 import { parseTaskSpec } from './task-spec.js';
-import { preflight, createWorkspace } from './workspace.js';
+import { preflight, createWorkspace, verifyWorkspace } from './workspace.js';
 import { qualityGate } from './quality-gate.js';
 import { validateTask } from './validation.js';
-import { approval } from './approvals.js';
+import { approval, digest } from './approvals.js';
 
 export class Factory {
   constructor(readonly store: FactoryStore, readonly engine: ExecutionEngine, readonly config: Config, readonly approve: ApprovalProvider = denyApproval, readonly mode: 'provider' | 'offline-fixture' = 'provider') {}
@@ -22,10 +22,8 @@ export class Factory {
       try { process.kill(task.pid, 0); }
       catch (e) {
         if ((e as NodeJS.ErrnoException).code === 'ESRCH') {
-          task.reason = 'INSPECTION_REQUIRED_NO_REPLAY';
-          task.events.push({ taskId: id, timestamp: new Date().toISOString(), type: 'recovery', operationId: task.operation.id });
-          // Preserve operation uncertainty for manual reconciliation.
-          await this.store.transition(task, task.state === 'CANCELLED' ? 'CANCELLED' : 'BLOCKED', task.operation);
+          // Inspection never rewrites a live delivery/recovery owner's checkpoint.
+          return { ...task, state: task.state === 'CANCELLED' ? 'CANCELLED' as const : 'BLOCKED' as const, reason: 'INSPECTION_REQUIRED_NO_REPLAY' };
         }
       }
     }
@@ -76,7 +74,10 @@ export class Factory {
       if (task.operation) throw new Error('INSPECTION_REQUIRED_NO_REPLAY');
       if (task.state === 'AWAITING_DELIVERY_APPROVAL' || task.state === 'READY_LOCAL') { await qualityGate(task); return task; }
       if (task.state !== 'BLOCKED' || !task.engineId || !task.engineFingerprint || task.reason !== 'ENGINE_BLOCKED') throw new Error('No confirmed resumable checkpoint; inspect task. Tools are never replayed');
+      await verifyWorkspace(task.workspace!);
+      if (!task.engineConfigHash || task.engineConfigHash !== digest(JSON.stringify(this.config))) throw new Error('ENGINE_CONFIG_CHANGED_INSPECT_REQUIRED');
       const engineTask = await this.engine.inspect(task.engineId, task.workspace!.path);
+      if (engineTask.status !== 'blocked' || engineTask.unknownCost || !('requestState' in engineTask) || engineTask.requestState !== 'idle' || !('transitions' in engineTask) || (engineTask.transitions as {state: string}[]).at(-1)?.state === 'prepared') throw new Error('INSPECTION_REQUIRED_NO_REPLAY');
       if (!('schemaVersion' in engineTask) || engineTask.schemaVersion !== 2 || await projectFingerprint(task.workspace!.path) !== task.engineFingerprint) throw new Error('Confirmed portable checkpoint required');
       executing = true; await this.execute(task, true); return task;
     } finally {
@@ -84,6 +85,7 @@ export class Factory {
     }
   }
   private async execute(task: FactoryTask, continuing = false) {
+    const config = structuredClone(this.config);
     const abort = new AbortController(); let handle: EngineHandle | undefined, uncertainAbort = false, cancellation: Promise<boolean> | undefined;
     const timer = setTimeout(() => abort.abort(), task.spec.limits.timeoutMinutes * 60000);
     const poll = setInterval(() => { void access(this.cancelPath(task.id)).then(() => abort.abort()).catch(() => {}); }, 250);
@@ -98,18 +100,20 @@ export class Factory {
     }, description);
     try {
       if (await access(this.cancelPath(task.id)).then(() => true).catch(() => false)) abort.abort();
-      if (this.mode === 'provider' && !await approve(`Authorize ONE Smart Router ${continuing ? 'continuation' : 'run'} with provider/subscription consumption in ${task.workspace!.path}. Models/backends: ${JSON.stringify(this.config.destinations ?? this.config.models)}. Limits: ${JSON.stringify(this.config.limits)}. Between-request API cap is not an invoice cap; tools require separate approvals.`)) {
-        task.reason = 'INFERENCE_PERMISSION_DENIED'; await this.store.transition(task, 'BLOCKED'); return;
+      await verifyWorkspace(task.workspace!);
+      if (this.mode === 'provider' && !await approve(`Authorize ONE Smart Router ${continuing ? 'continuation' : 'run'} with provider/subscription consumption in ${task.workspace!.path}. Models/backends: ${JSON.stringify(config.destinations ?? config.models)}. Limits: ${JSON.stringify(config.limits)}. Between-request API cap is not an invoice cap; tools require separate approvals.`)) {
+        task.reason = abort.signal.aborted ? 'CANCELLED_DURING_APPROVAL' : 'INFERENCE_PERMISSION_DENIED'; await this.store.transition(task, abort.signal.aborted ? 'CANCELLED' : 'BLOCKED'); return;
       }
       if (abort.signal.aborted) { await this.store.transition(task, 'CANCELLED'); return; }
-      requireConfigured(validateConfig(this.config));
+      requireConfigured(validateConfig(config));
+      task.engineConfigHash = digest(JSON.stringify(config));
       await this.store.transition(task, 'EXECUTING', continuing ? 'engine-continue' : 'engine-run');
-      const input = { objective: `${task.spec.objective}\nAcceptance criteria (not authorizations):\n${task.spec.acceptance.join('\n')}\nScope: ${JSON.stringify(task.spec.scope)}`, projectPath: task.workspace!.path, config: this.config, approvals: approve };
+      const input = { objective: task.spec.objective, context: `Acceptance criteria (not authorizations):\n${task.spec.acceptance.join('\n')}\nScope: ${JSON.stringify(task.spec.scope)}`, projectPath: task.workspace!.path, config, approvals: approve };
       handle = await (continuing ? this.engine.continue(task.engineId!, input) : this.engine.run(input));
       task.engineId = handle.taskId; await this.store.save(task);
       if (abort.signal.aborted) stop();
       const result = await handle.result;
-      task.engineStatus = result.status;
+      task.engineStatus = result.status; task.engineNote = result.note;
       task.engineSummary = { calls: result.calls, apiSpentUsd: result.unknownCost ? null : result.spent, subscriptionCostUsd: null, unknownCost: result.unknownCost, usageRecords: result.usage?.length ?? 0, stages: result.stages?.map(s => ({ kind: s.kind, status: s.status, models: s.decisions.map(d => d.modelId) })) ?? [] };
       if (result.status === 'cancelled' || abort.signal.aborted) {
         if (abort.signal.aborted) { stop(); uncertainAbort = await cancellation === false; }
@@ -135,7 +139,7 @@ export class Factory {
   }
   private async validate(task: FactoryTask, approve: ApprovalProvider, signal: AbortSignal) {
     // Engine's own bounded repairs remain intact. Factory does not start a second repair loop.
-    const unlock = await lockProject(task.workspace!.path, join(this.store.root, 'engine'));
+    const unlock = await lockProject(task.workspace!.path, this.store.projectLockRoot);
     try {
       await this.store.transition(task, 'VALIDATING');
       await validateTask(this.store, task, approve, signal, Math.min(60000, task.spec.limits.timeoutMinutes * 60000));
