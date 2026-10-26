@@ -10,7 +10,7 @@ import { OpenCodeBackend } from './opencode.js';
 import { DemoBackend } from './demo.js';
 import { ContinuityController } from './continuity.js';
 import { ContinuityStore, coordination } from './continuity-state.js';
-import { CodexBackend, ClaudeBackend } from './native-backends.js';
+import { createBackend } from './engine/backend-factory.js';
 import type { Destination, PortableTask } from './types.js';
 import { Controller } from './controller.js';
 import type { Backend, Config, Task } from './types.js';
@@ -68,13 +68,7 @@ async function main() {
     const override = deepOnly ? 'deep' : config.mode === 'manual' ? 'balanced' : undefined;
     console.log(JSON.stringify({ classification:c, availabilityChecked:false, stages:plan(c).map(s => config.destinations ? { kind: s.kind, candidates: config.destinations.map(d => ({ destination: d.id, backend: d.backend, billing: d.billing, ...routeTarget(s, c, { ...config, models: d.models }, override) })) } : ({kind:s.kind,...routeTarget(s,c,config,override)})) },null,2)); return;
   }
-  const makeBackend = async (d: Destination, approve: (description: string) => Promise<boolean>): Promise<Backend> => {
-    if (d.backend === 'codex') return new CodexBackend(d, project, approve);
-    if (d.backend === 'claude') return new ClaudeBackend(d, project, approve);
-    await loadLocalEnv(project);
-    if (!process.env.OPENROUTER_API_KEY) throw Object.assign(new Error('Missing OPENROUTER_API_KEY for explicitly configured API destination'), { code: 'SMART_AUTH_REQUIRED' });
-    const backend = await OpenCodeBackend.start(project, approve); backend.identity = d.id; backend.billing = 'api'; return backend;
-  };
+  const makeBackend = (d: Destination, approve: (description: string) => Promise<boolean>) => createBackend(d, project, approve);
   if (diagnosing) {
     const results = [];
     for (const d of config.destinations ?? [{ id: 'opencode', backend: 'opencode' as const, billing: 'api' as const, models: config.models }]) {
