@@ -20,3 +20,10 @@ it('creates an exact base worktree and preserves original HEAD, index and dirty 
     expect(w2.path).not.toBe(w.path); expect(await git(w2.path, ['status', '--porcelain'])).toBe('');
   } finally { await f.cleanup(); }
 });
+it('normalizes only macOS system aliases and leaves Linux temporary roots intact', async () => {
+  const { canonicalHostPath } = await import('../src/factory/workspace.js');
+  expect(canonicalHostPath('/tmp/task', 'linux')).toBe('/tmp/task');
+  expect(canonicalHostPath('/var/task', 'linux')).toBe('/var/task');
+  expect(canonicalHostPath('/tmp/task', 'darwin')).toBe('/private/tmp/task');
+  expect(canonicalHostPath('/var/task', 'darwin')).toBe('/private/var/task');
+});

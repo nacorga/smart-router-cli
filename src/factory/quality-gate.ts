@@ -6,7 +6,7 @@ import { matches, type TaskSpec } from './task-spec.js';
 import type { FactoryTask } from './state.js';
 
 export async function changedPaths(root: string, base: string) {
-  return [...new Set(((await git(root, ['diff', '--no-renames', '--name-only', '-z', base, '--'])) + (await git(root, ['ls-files', '--others', '--exclude-standard', '-z']))).split('\0').filter(Boolean))].sort();
+  return [...new Set(((await git(root, ['diff', '--no-renames', '--name-only', '-z', base, '--'])) + (await git(root, ['diff', '--cached', '--no-renames', '--name-only', '-z', base, '--'])) + (await git(root, ['ls-files', '--others', '--exclude-standard', '-z']))).split('\0').filter(Boolean))].sort();
 }
 export function scopeAllows(spec: TaskSpec, name: string) {
   return !secretPath(name) && !/(^|\/)(?:node_modules|\.github|\.gitmodules|\.gitattributes|\.gitignore)(?:\/|$)/i.test(name)

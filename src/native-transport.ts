@@ -1,3 +1,4 @@
+import { withoutDeliveryCredentials } from './engine/environment.js';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { stopChild } from './server.js';
 /** Bounded newline JSON parser; malformed/truncated events never become successful results. */
@@ -19,7 +20,7 @@ export class JsonLines {
   finish() { if (this.buffer.trim()) throw new Error('TRUNCATED_EVENT'); }
 }
 export function subscriptionEnvironment(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
+  const env = withoutDeliveryCredentials();
   for (const key of Object.keys(env)) if (/^(?:ANTHROPIC_|OPENAI_|OPENROUTER_|CLAUDE_CODE_USE_|CLAUDE_CODE_OAUTH_TOKEN|CODEX_API_KEY)/.test(key)) delete env[key];
   env.CLAUDE_CODE_DISABLE_FILE_MENTIONS = '1';
   return env;

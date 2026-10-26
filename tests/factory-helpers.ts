@@ -31,10 +31,10 @@ export async function fixture(id = 'fixture-task', behavior: 'correct' | 'broken
         else {
           const tools = new NativeTools(project, stage, behavior === 'denied' ? async () => false : authorize, new AbortController().signal);
           await tools.call('write_file', { path: 'index.mjs', content: behavior === 'broken' ? 'export const sum = () => 0;\n' : 'export const sum = (a, b) => a + b;\n' });
-          if (tools.denied) return { text: 'tests passed', validation: 'none', failure: 'permission', evidence: [], usage: [{ messageId: randomUUID(), inputTokens: 0, outputTokens: 0, source: 'local', costUsd: 0 }] };
+          if (tools.denied) return { text: 'tests passed', validation: 'none', reviewVerdict: stage === 'review' ? 'passed' : undefined, failure: 'permission', evidence: [], usage: [{ messageId: randomUUID(), inputTokens: 0, outputTokens: 0, source: 'local', costUsd: 0 }] };
         }
       }
-      return { text: 'tests passed (untrusted claim)', validation: 'none', evidence: [], usage: [{ messageId: randomUUID(), inputTokens: 0, outputTokens: 0, source: 'local', costUsd: 0 }] };
+      return { text: 'tests passed (untrusted claim)', reviewVerdict: stage === 'review' ? 'passed' : undefined, validation: 'none', evidence: [], usage: [{ messageId: randomUUID(), inputTokens: 0, outputTokens: 0, source: 'local', costUsd: 0 }] };
     },
   } satisfies Backend));
   const factory = new Factory(store, engine, config, approve, 'offline-fixture');

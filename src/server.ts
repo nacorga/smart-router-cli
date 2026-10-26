@@ -1,3 +1,4 @@
+import { withoutDeliveryCredentials } from './engine/environment.js';
 import {spawn, type ChildProcess} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {dirname,join} from 'node:path';
@@ -16,7 +17,7 @@ export async function stopChild(child:ChildProcess,graceMs=2000):Promise<void>{
 export async function startDedicatedServer(directory:string,config:Config){
   const require=createRequire(import.meta.url);
   const executable=join(dirname(require.resolve('opencode-ai/package.json')),'bin','opencode.exe');
-  const child=spawn(executable,['serve','--hostname=127.0.0.1','--port=0'],{cwd:directory,windowsHide:true,stdio:['ignore','pipe','pipe'],env:{...process.env,OPENCODE_CONFIG_CONTENT:JSON.stringify(config)}});
+  const child=spawn(executable,['serve','--hostname=127.0.0.1','--port=0'],{cwd:directory,windowsHide:true,stdio:['ignore','pipe','pipe'],env:{...withoutDeliveryCredentials(),OPENCODE_CONFIG_CONTENT:JSON.stringify(config)}});
   let closing:Promise<void>|undefined;
   const close=()=>closing??=stopChild(child);
   // Drain server logs without duplicating their potentially private contents in wrapper telemetry.

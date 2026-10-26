@@ -31,6 +31,7 @@ export class Controller {
       budget: this.config.limits.maxCostUsd, spent: 0, unknownCost: false, calls: 0, stages: plan(classification), classification, usage: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     let catalog: Model[] = [];
     try {
+      await this.store.save(task);
       if (this.cancelled) { task.status = 'cancelled'; return task; }
       // Verify the entire planned route before the first billable prompt.
       catalog = await this.backend.catalog();

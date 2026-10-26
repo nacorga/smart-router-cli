@@ -11,7 +11,11 @@ export function hostEnvironment(): NodeJS.ProcessEnv {
   return env;
 }
 export async function git(cwd: string, args: string[]) {
-  return (await exec('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'submodule.recurse=false', '-C', cwd, ...args], { env: { ...hostEnvironment(), HOME: homedir(), GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1' }, maxBuffer: 8 * 1024 * 1024, timeout: 30000 })).stdout;
+  return (await exec('git', ['--literal-pathspecs', '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'submodule.recurse=false', '-C', cwd, ...args], { env: { ...hostEnvironment(), HOME: homedir(), GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_NOSYSTEM: '1' }, maxBuffer: 8 * 1024 * 1024, timeout: 30000 })).stdout;
+}
+export function canonicalHostPath(path: string, platform: NodeJS.Platform = process.platform) {
+  const absolute = resolve(path);
+  return platform === 'darwin' ? absolute.replace(/^\/tmp(?=\/|$)/, '/private/tmp').replace(/^\/var(?=\/|$)/, '/private/var') : absolute;
 }
 export function outside(root: string, path: string) {
   const rel = relative(root, path); return rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel);
@@ -30,7 +34,7 @@ export async function preflight(repository: string, baseRef: string, stateRoot: 
   if (!/^[a-z][a-z0-9-]{0,63}$/.test(id)) throw new Error('Invalid task ID');
   const repo = await realpath(repository); await noSymlinks(repo);
   if (resolve(repository) !== repo && (await lstat(resolve(repository))).isSymbolicLink()) throw new Error('SYMLINK_REPOSITORY_DENIED');
-  await noSymlinks(resolve(repository).replace(/^\/tmp(?=\/|$)/, '/private/tmp').replace(/^\/var(?=\/|$)/, '/private/var'));
+  await noSymlinks(canonicalHostPath(repository));
   if ((await realpath((await git(repo, ['rev-parse', '--show-toplevel'])).trim())) !== repo) throw new Error('Repository root required');
   const common = await realpath(resolve(repo, (await git(repo, ['rev-parse', '--git-common-dir'])).trim()));
   const state = await realpath(stateRoot);
@@ -51,6 +55,7 @@ export async function preflight(repository: string, baseRef: string, stateRoot: 
 }
 export async function createWorkspace(workspace: Workspace) {
   await mkdir(resolve(workspace.path, '..'), { recursive: true, mode: 0o700 });
+  await noSymlinks(resolve(workspace.path, '..'));
   await git(workspace.repository, ['worktree', 'add', '-b', workspace.branch, workspace.path, workspace.baseSha]);
   if ((await git(workspace.path, ['rev-parse', 'HEAD'])).trim() !== workspace.baseSha) throw new Error('WORKSPACE_BASE_MISMATCH');
 }

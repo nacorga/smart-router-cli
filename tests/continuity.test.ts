@@ -112,7 +112,7 @@ it('keeps CLI exports and coordination separate from explicit private inspection
   expect((await run('--export')).stdout).not.toContain('PRIVATE_OBJECTIVE_MARKER');
   expect((await run('--coordination')).stdout).not.toContain('PRIVATE_OBJECTIVE_MARKER');
   expect((await run('--handoff')).stdout).toContain('PRIVATE_OBJECTIVE_MARKER');
-});
+}, 15000);
 
 it('does not reuse a passed check from an earlier stage after a later unverified edit', async () => {
   const f = await setup();

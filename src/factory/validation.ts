@@ -20,7 +20,7 @@ export async function runValidation(command: ValidationCommand, cwd: string, pri
   const home = await mkdtemp(join(privateRoot, 'validation-'));
   const child = spawn(command.executable, command.args, { cwd, shell: false, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...hostEnvironment(), HOME: home, TMPDIR: home, XDG_CONFIG_HOME: home, XDG_CACHE_HOME: home, XDG_DATA_HOME: home, XDG_STATE_HOME: home, CI: '1', npm_config_ignore_scripts: 'true', npm_config_cache: join(home, 'npm'), npm_config_userconfig: join(home, 'npmrc') } });
   let reason: string | undefined, size = 0, output = '', closed = false;
-  const kill = () => { if (child.pid) try { process.kill(-child.pid, 'SIGKILL'); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ESRCH') reason = 'TERMINATION_UNCONFIRMED'; } };
+  const kill = () => { if (child.pid) try { process.kill(-child.pid, 'SIGKILL'); } catch { /* Termination is verified independently after close. */ } };
   const stop = (why: string) => { reason ??= why; kill(); };
   const cancel = () => stop('CANCELLED'); signal.addEventListener('abort', cancel, { once: true });
   const timer = setTimeout(() => stop('TIMEOUT'), timeoutMs);
@@ -34,8 +34,14 @@ export async function runValidation(command: ValidationCommand, cwd: string, pri
       child.once('close', code => { closed = true; resolve(code); });
       watchdog = setTimeout(() => { stop('TERMINATION_UNCONFIRMED'); resolve(null); }, timeoutMs + 3000);
     });
-    let terminated = closed;
-    if (child.pid) try { process.kill(-child.pid, 0); terminated = false; } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ESRCH') terminated = false; }
+    const groupGone = () => {
+      if (!child.pid) return true;
+      try { process.kill(-child.pid, 0); return false; }
+      catch (e) { return (e as NodeJS.ErrnoException).code === 'ESRCH'; }
+    };
+    // A killed grandchild may need a short interval to be reaped by its owner.
+    for (let i = 0; closed && !groupGone() && i < 40; i++) await new Promise(r => setTimeout(r, 25));
+    const terminated = closed && groupGone();
     if (!terminated) reason ??= 'TERMINATION_UNCONFIRMED';
     return { exitCode, digest: digest(output), reason, terminated };
   } finally {

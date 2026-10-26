@@ -13,7 +13,8 @@ it('retains stale locks and uncertain journals without replaying operations', as
     expect((await f.factory.inspect(task.id)).state).toBe('BLOCKED'); expect(f.requests()).toBe(count);
     await expect(f.factory.continue(task.id)).rejects.toThrow('INSPECTION');
     // A deliberately retained lock is never automatically deleted.
-    await expect(f.store.lock('another-task')).rejects.toThrow('INSPECTION');
+    const release = await f.store.lock(task.id);
+    await expect(f.store.lock('another-task')).rejects.toThrow('INSPECTION'); await release();
   } finally { await f.cleanup(); }
 });
 it('cancels the active engine, retains earlier effects and rejects automatic continuation', async () => {
@@ -31,5 +32,19 @@ it('cancels the active engine, retains earlier effects and rejects automatic con
     expect((await factory.cancel(f.spec.id)).reason).toContain('REQUESTED');
     const task = await running; expect(task.state).toBe('CANCELLED'); expect(aborts).toBeGreaterThan(0);
     await expect(factory.continue(task.id)).rejects.toThrow();
+  } finally { await f.cleanup(); }
+});
+it('keeps explicit cancellation and the inspection guard when the engine result is uncertain', async () => {
+  const f = await fixture(); let entered!: () => void, release!: () => void;
+  const started = new Promise<void>(r => { entered = r; }), waiting = new Promise<void>(r => { release = r; });
+  const engine: ExecutionEngine = {
+    run: async () => { entered(); return { taskId: randomUUID(), cancel: async () => { release(); return false; }, result: waiting.then(() => { throw new Error('uncertain backend cleanup'); }) }; },
+    inspect: async () => { throw new Error('No checkpoint'); }, continue: async () => { throw new Error('No replay'); },
+  };
+  const factory = new Factory(f.store, engine, f.config, async () => true, 'offline-fixture');
+  try {
+    const running = factory.run(f.spec); await started; await factory.cancel(f.spec.id);
+    const task = await running; expect(task.state).toBe('CANCELLED'); expect(task.operation?.kind).toBe('engine-run'); expect(task.reason).toContain('INSPECTION');
+    await expect(f.store.lock('another')).rejects.toThrow('INSPECTION');
   } finally { await f.cleanup(); }
 });

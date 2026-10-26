@@ -9,7 +9,7 @@ import { createBackend, denyApproval, type ApprovalProvider } from './backend-fa
 export interface EngineEvent {
   taskId: string; timestamp: string;
   type: 'task' | 'stage' | 'routing' | 'approval-requested' | 'approval-granted' | 'approval-denied' | 'result';
-  status?: Task['status']; stage?: string; tier?: string;
+  status?: Task['status']; stage?: string; stageStatus?: Task['stages'][number]['status']; tier?: string;
 }
 export interface EngineInput {
   objective: string; projectPath: string; config: Config; approvals?: ApprovalProvider;
@@ -60,7 +60,7 @@ export class SmartEngine implements ExecutionEngine {
         emit({ type: 'task', status: task.status });
         for (const stage of task.stages) {
           const key = `${stage.id}:${stage.status}`;
-          if (!seen.has(key)) { seen.add(key); emit({ type: 'stage', stage: stage.kind }); }
+          if (!seen.has(key)) { seen.add(key); emit({ type: 'stage', stage: stage.kind, stageStatus: stage.status }); }
           for (const decision of stage.decisions) if (!seen.has(decision.timestamp + stage.id)) {
             seen.add(decision.timestamp + stage.id); emit({ type: 'routing', stage: stage.kind, tier: decision.tier });
           }

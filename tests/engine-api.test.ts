@@ -46,3 +46,38 @@ it('exposes cancellation without claiming an uncertain abort succeeded', async (
     const task = await handle.result; expect(task.status).toBe('cancelled'); expect(task.unknownCost).toBe(true);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+it('continues confirmed portable checkpoints and retains IDs/counters without inventing legacy continuity', async () => {
+  const { repositoryFixture } = await import('./factory-repository.js');
+  const f = await repositoryFixture(); const config = structuredClone(defaults);
+  config.models = { fast: 'p/fast', balanced: 'p/balanced', deep: 'p/deep' };
+  config.schemaVersion = 2; config.destinations = [{ id: 'scripted', backend: 'codex', billing: 'subscription', models: config.models }];
+  let requests = 0, closed = 0;
+  const engine = new SmartEngine(new Store(join(f.root, 'engine')), async () => ({
+    catalog: async () => Object.values(config.models).map(id => ({ id, tools: true, context: 64000 })),
+    create: async () => 'confirmed-session', prepare: async () => {}, abort: async () => true, close: () => { closed++; },
+    prompt: async () => ({ text: 'private observation', usage: [], evidence: [], validation: 'none', toolsExecuted: false, ...(requests++ === 0 ? { failure: 'infrastructure', retryable: false } : {}) }),
+  }));
+  try {
+    const input = { objective: 'Explain the parser', projectPath: f.repo, config };
+    const first = await engine.run(input), blocked = await first.result;
+    expect(blocked.status).toBe('blocked'); expect(blocked.calls).toBe(1);
+    const resumed = await engine.continue(first.taskId, { ...input, objective: 'ignored; portable objective remains private' });
+    const final = await resumed.result; expect(final.id).toBe(first.taskId); expect(final.status).toBe('completed'); expect(final.calls).toBe(2); expect(closed).toBe(2);
+  } finally { await f.cleanup(); }
+});
+
+it('returns a handle during legacy preflight so cancellation can prevent session creation', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'engine-preflight-')); const project = join(root, 'project'); await mkdir(project);
+  const config = structuredClone(defaults); config.models = { fast: 'p/fast', balanced: 'p/balanced', deep: 'p/deep' };
+  let release!: () => void, creates = 0;
+  const wait = new Promise<void>(r => { release = r; });
+  const engine = new SmartEngine(new Store(join(root, 'state')), async () => ({
+    catalog: async () => { await wait; return Object.values(config.models).map(id => ({ id, tools: true, context: 64000 })); },
+    create: async () => { creates++; return 'never-created'; }, abort: async () => true, close() {}, prompt: async () => { throw new Error('never called'); },
+  }));
+  try {
+    const handle = await engine.run({ objective: 'Implement parser', projectPath: project, config });
+    expect(await handle.cancel()).toBe(true); release(); expect((await handle.result).status).toBe('cancelled'); expect(creates).toBe(0);
+  } finally { release(); await rm(root, { recursive: true, force: true }); }
+});

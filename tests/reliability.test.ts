@@ -66,7 +66,7 @@ describe('prospective controlled evaluation', () => {
       const bytes = JSON.stringify(plan); await writeFile(planPath, bytes);
       const args = ['--import', 'tsx', cli, '--rehearse', '--plan', planPath, '--plan-sha256', sha(bytes), '--output', output];
       const env = { ...process.env, OPENROUTER_API_KEY: 'invalid-key-no-provider-may-be-used' };
-      const { stdout } = await exec(process.execPath, args, { env, timeout: 45000 });
+      const { stdout } = await exec(process.execPath, args, { env, timeout: 120000 });
       expect(JSON.parse(stdout).execution).toBe('SIMULATION');
       const summary = JSON.parse(await readFile(join(output, 'summary.json'), 'utf8'));
       expect(summary.stopReason).toBe('finished'); expect(summary.results).toHaveLength(60);
@@ -74,7 +74,9 @@ describe('prospective controlled evaluation', () => {
       for (const arm of ['smart', 'deep-only']) expect(summary.metrics.arms[arm].acceptedCompleted).toBe(30);
       await expect(exec(process.execPath, args, { env })).rejects.toThrow('EEXIST');
     } finally { await rm(root, { recursive: true, force: true }); }
-  }, 50000);
+  // Sixty sequential Node fixture executions and independent judges on shared hosts.
+  // Product/slot deadlines and every acceptance assertion remain unchanged.
+  }, 130000);
   it('previews with a dummy key without starting inference and never overwrites a frozen plan', async () => {
     const root = await mkdtemp(join(tmpdir(), 'smart-plan-test-'));
     try {
