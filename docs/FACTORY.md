@@ -66,10 +66,13 @@ repositories. Do not place production credentials next to candidate code.
 
 Private JSON state lives under `SMART_STATE_DIR/factory`, or the default Smart
 state directory's `factory` child. Directories require 0700; files use 0600. State
-and workspaces must be outside the repository. IDs, base SHA, branch, Engine ID,
+and workspaces must be outside the repository. Factory and Smart share the project-lock root while Engine metadata stays private.
+Programmatic hosts using custom roots must pass the same project lock root to
+`Store(metadataRoot, lockRoot)` and `FactoryStore(factoryRoot, lockRoot)`.
+IDs, base SHA, branch, Engine ID,
 checks, content hashes, approval digests and durable transitions are retained.
 Private `inspect` output includes objectives and local paths; do not publish it.
-`status` emits reduced metadata and safe events. Original dirty changes are not
+`status` emits reduced metadata, the Engine block reason and safe events. Inspection is read-only, including after a crash; it does not overwrite an active recovery owner. Routing classifies the objective alone; acceptance and scope remain separate model context. Original dirty changes are not
 copied into the worktree. No base checkout reset, cleanup or automatic deletion
 is performed.
 
@@ -82,7 +85,7 @@ in this MVP. Repository checkout filters/attributes and submodules are rejected.
 Secret-pattern scanning is conservative and cannot prove absence of all secrets.
 
 `continue` can inspect a fresh validated checkpoint, or explicitly resume a
-blocked portable Engine checkpoint with an unchanged fingerprint and confirmed
+blocked portable Engine checkpoint with identical execution configuration, an unchanged fingerprint and confirmed
 idle native session. Engine counters are retained. Legacy sessions, cancelled
 tasks and uncertain operations cannot be replayed. A cancellation request file
 is consumed by the active owner; a request alone does not prove termination.
@@ -96,7 +99,7 @@ or locks. There is no automated repair of ambiguous local commits/worktree adds.
 local commit, remote inspection, push and Draft PR. It rechecks content/HEAD/base
 and remote destination after approval. Git hooks and commit signing are disabled
 for these owned operations. Only scoped changed files are staged. No tokens are
-passed to model tools. Host Git/gh use the user's configured authentication.
+passed to model tools. Host Git/gh use the user's configured authentication. Approved host Git operations inherit only the selected GitHub credential-helper and SSH-agent settings; providers and independent validation do not receive delivery tokens.
 
 With `delivery.draftPR: false`, successful delivery ends at `READY_LOCAL` with a
 local commit. To publish, opt into `draftPR: true` before starting, configure a
@@ -113,10 +116,10 @@ still needs the user's authorization.
 
 After an uncertain push/PR, a later `deliver` first asks to inspect remote refs
 and PRs. A matching draft with the exact commit/base is reused. Conflicts block
-publication. An absent PR after an uncertain create requires manual inspection;
+publication. An absent remote branch after an uncertain push, or an absent PR after an uncertain create, requires manual inspection;
 it is never automatically retried. Offline tests use local bare remotes and a
-fake GitHub client, never GitHub itself. macOS is exercised locally; Linux remains
-subject to CI. Windows validation is deliberately blocked.
+fake GitHub client, never GitHub itself. macOS and Linux arm64 were exercised
+locally; hosted x64 CI remains pending. Windows validation is deliberately blocked.
 
 ## Programmatic Engine
 
@@ -131,3 +134,51 @@ contents and streamed model output. Observer exceptions cannot grant permission
 or alter execution. Always await `result` after requesting cancellation; the
 returned abort boolean alone does not roll back or prove absence of earlier
 changes. Backends are closed on settlement.
+
+## Prepare a supervised real pilot (no inference)
+
+```sh
+npm run pilot:factory:prepare -- --output <new-private-directory-outside-Git> \
+  --backend codex --model <explicit-available-model> --executable <trusted-codex-cli>
+```
+
+This development harness prepares a dependency-free parser repository, a committed
+failing baseline (actual exit 1), TaskSpec and subscription configuration. It never
+starts a provider, installs dependencies or publishes. The tests cover empty
+input, CRLF, Unicode and preservation of spaces. Only `index.mjs` may change;
+tests/package are protected. Inspect the generated files before authorizing work.
+The original checkout must stay unchanged, the independent check must exit 0,
+checks must match the final content hash, and delivery must remain local.
+
+The prepared limits are three wrapper requests, five minutes, zero automatic
+repairs/escalations/retries and no API budget. Subscription usage is real usage;
+its monetary cost is unknown and these limits are not an invoice cap. Verify
+provider billing settings and explicitly authorize this one pilot first.
+Then, in a terminal, set `SMART_STATE_DIR` to a private sibling outside all Git
+checkouts and run `factory run --spec <task.json> --config <config.json> --run`.
+Every concrete edit/command still needs approval. Review `status`/`inspect` and
+the diff before optionally invoking `deliver` for a separately approved local
+commit. No remote origin is configured. Never run this preparation against
+TraceLog, private production code or a repository with production credentials.
+
+For a new native binary, run the appropriate policy smoke with
+`--candidate-version <exact-version>` before editing the production version list.
+This flag is confined to the scripted loopback harness; it cannot authorize an
+unverified production backend. Keep all registry/policy assertions intact.
+Existing Factory validations from before the stabilized content-hash encoding
+are invalidated conservatively; inspection does not silently revalidate them.
+
+## CI validation
+
+The Linux workflow runs Node 22 and 24, the complete tests, independent validation,
+continuity and package smokes. Dependency lifecycle scripts are disabled; the
+trusted setup script copies the lockfile-pinned OpenCode optional binary. Package
+smokes install against a frozen runtime lock, so a fresh npm-ci cache needs only
+tarballs rather than previously cached registry metadata. No real model credentials
+or native subscription authentication belong in CI. Native policy smokes are
+separate, explicit loopback checks against each exact installed binary.
+
+The stabilization checks were exercised on macOS and an isolated Linux arm64
+container with Node 22 and 24, with networking disabled during validation. This
+is local CI-equivalent evidence; GitHub-hosted x64 jobs were not triggered. The
+prepared real-model pilot remains a separate human authorization and evidence gate.
