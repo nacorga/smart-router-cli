@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import type { Availability, Backend, BackendProbe, Destination, Model, Result, StageKind } from './types.js';
 import { JsonLines, subscriptionEnvironment } from './native-transport.js';
 import { NativeTools } from './native-tools.js';
-import { claudeSettings, verifyClaudeTools } from './claude-policy.js';
+import { claudeSettings, supportedClaudeVersion, verifyClaudeTools } from './claude-policy.js';
 import { claudeQuota } from './claude-quota.js';
 import { parseReview } from './opencode.js';
 import { stopChild } from './server.js';
@@ -36,7 +36,8 @@ export class ClaudeBackend implements Backend {
   async probe(): Promise<BackendProbe> {
     try {
       const version = (await exec(this.destination.executable ?? 'claude', ['--version'], { env: subscriptionEnvironment(), timeout: 10000 })).stdout.trim();
-      const supported = /^2\.1\.303\b/.test(version);
+      const supported = supportedClaudeVersion(version);
+      if (!supported) return { authenticated: false, policyEnforced: false, version, reason: 'UNVERIFIED_CLAUDE_VERSION', availability: observation('unavailable', 'preflight') };
       let auth;
       try { auth = JSON.parse((await exec(this.destination.executable ?? 'claude', ['auth', 'status'], { env: subscriptionEnvironment(), timeout: 10000 })).stdout); }
       catch { return { authenticated: false, policyEnforced: false, version, reason: 'SUBSCRIPTION_AUTH_REQUIRED', availability: observation('unknown', 'authentication-unverified') }; }

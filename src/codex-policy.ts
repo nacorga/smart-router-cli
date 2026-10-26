@@ -3,6 +3,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 /** Pinning this policy requires the native scripted-provider smoke, not a model's assertion. */
 export const codexPolicyVersion = 'codex-cli 0.163.0-alpha.10.2';
+// Each additional exact binary passes the same native loopback contract.
+export const codexPolicyVersions = [codexPolicyVersion, 'codex-cli 0.164.0-alpha.11.1'] as const;
 export function featureNames(output: string): string[] {
   const rows = output.trim().split('\n').map(line => line.trim().split(/\s+/)).filter(row => row[1] !== 'removed').map(row => row[0]!).filter(name => /^[a-z][a-z0-9_]*$/.test(name));
   if (!['shell_tool', 'hooks', 'plugins', 'apps', 'view_image', 'multi_agent_v2'].every(name => rows.includes(name))) throw new Error('CODEX_FEATURE_CONTRACT_UNVERIFIED');

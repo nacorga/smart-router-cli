@@ -8,7 +8,7 @@ import type { Availability, Backend, BackendProbe, Destination, Model, Result, S
 import { RpcProcess, subscriptionEnvironment } from './native-transport.js';
 import { NativeTools } from './native-tools.js';
 import { smartTools } from './continuity-mcp.js';
-import { cachedCodexModels, codexPolicyArgs, codexPolicyVersion, featureNames, inactiveCodexMcp, verifyCodexPolicy } from './codex-policy.js';
+import { cachedCodexModels, codexPolicyArgs, codexPolicyVersions, featureNames, inactiveCodexMcp, verifyCodexPolicy } from './codex-policy.js';
 import { parseReview } from './opencode.js';
 const exec = promisify(execFile);
 const observed = (state: Availability['state'], source: string): Availability => ({ state, source, observedAt: new Date().toISOString() });
@@ -39,7 +39,7 @@ export class CodexBackend implements Backend {
     try {
       if (!this.verified) {
         this.version = (await exec(this.destination.executable ?? 'codex', ['--version'], { env: subscriptionEnvironment(), timeout: 10000 })).stdout.trim();
-        if (this.version !== codexPolicyVersion) throw new Error('UNVERIFIED_CODEX_VERSION');
+        if (!codexPolicyVersions.some(version => version === this.version)) throw new Error('UNVERIFIED_CODEX_VERSION');
         const features = featureNames((await exec(this.destination.executable ?? 'codex', ['features', 'list'], { env: subscriptionEnvironment(), timeout: 10000 })).stdout);
         await this.connect([...this.providerArgs(), ...codexPolicyArgs(features)]);
         const account = await this.rpc!.request('account/read', { refreshToken: false });

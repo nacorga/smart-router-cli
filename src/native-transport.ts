@@ -23,6 +23,7 @@ export function subscriptionEnvironment(): NodeJS.ProcessEnv {
   const env = withoutDeliveryCredentials();
   for (const key of Object.keys(env)) if (/^(?:ANTHROPIC_|OPENAI_|OPENROUTER_|CLAUDE_CODE_USE_|CLAUDE_CODE_OAUTH_TOKEN|CODEX_API_KEY)/.test(key)) delete env[key];
   env.CLAUDE_CODE_DISABLE_FILE_MENTIONS = '1';
+  env.ENABLE_TOOL_SEARCH = 'false';
   return env;
 }
 export class RpcProcess {
