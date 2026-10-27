@@ -91,13 +91,14 @@ export class Factory {
     const poll = setInterval(() => { void access(this.cancelPath(task.id)).then(() => abort.abort()).catch(() => {}); }, 250);
     const stop = () => { if (handle) cancellation ??= handle.cancel().catch(() => false); };
     abort.signal.addEventListener('abort', stop);
-    const approve: ApprovalProvider = description => approval(this.store, task, async details => {
+    const requestApproval: ApprovalProvider = async details => {
       if (abort.signal.aborted) return false;
-      let cancel!: () => void;
+      let cancel: (() => void) | undefined;
       try {
         return await Promise.race([this.approve(details), new Promise<boolean>(r => { cancel = () => r(false); abort.signal.addEventListener('abort', cancel, { once: true }); })]);
-      } finally { abort.signal.removeEventListener('abort', cancel); }
-    }, description);
+      } finally { if (cancel) abort.signal.removeEventListener('abort', cancel); }
+    };
+    const approve: ApprovalProvider = description => approval(this.store, task, requestApproval, description);
     try {
       if (await access(this.cancelPath(task.id)).then(() => true).catch(() => false)) abort.abort();
       await verifyWorkspace(task.workspace!);
@@ -130,7 +131,8 @@ export class Factory {
         task.reason = result.status === 'blocked' ? 'ENGINE_BLOCKED' : 'ENGINE_FAILED';
         await this.store.transition(task, result.status === 'failed' ? 'FAILED' : 'BLOCKED'); return;
       }
-      await this.validate(task, approve, abort.signal);
+      // validateTask journals its own approval; pass only the cancellation-aware host gate.
+      await this.validate(task, requestApproval, abort.signal);
     } catch (error) {
       if (!abort.signal.aborted) throw error;
       task.reason = 'INSPECTION_REQUIRED_CANCEL_UNCONFIRMED';
