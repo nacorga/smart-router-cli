@@ -15,6 +15,7 @@ async function fixture(scenario = 'ok', authorize?: ApprovalProvider) {
   cleanup.push(async () => { if (previous === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = previous; await rm(root, { recursive: true, force: true }); });
   await writeFile(join(home, 'models_cache.json'), JSON.stringify({ identity: { private: 'not-model-metadata' }, models: [{ slug: 'fixture-model', context_window: 200000 }] }));
   await writeFile(join(root, 'value.txt'), 'prior');
+  await writeFile(join(root, 'test.mjs'), "import assert from 'node:assert/strict'; assert.equal(2 + 3, 5);\n");
   await writeFile(join(root, 'package.json'), JSON.stringify({ scripts: { test: 'node -e "process.exit(0)"' } }));
   await writeFile(executable, `#!/usr/bin/env node
 import {createInterface} from 'node:readline';import fs from 'node:fs/promises';
@@ -31,7 +32,7 @@ const complete=()=>{const boundary=['final-boundary','over-boundary','tools-afte
  if(scenario==='tools-after-final'){phase=0;call();return;}
  const finish=()=>send({method:'turn/completed',params:{threadId:'fixture-session',turn:{id:turn,status:scenario==='quota'||scenario==='quota-after'||scenario==='rate'?'failed':'completed',error:{codexErrorInfo:scenario==='rate'?'rateLimitExceeded':'usageLimitExceeded'}}}});
  if(boundary)setTimeout(finish,30);else finish();};
-const call=()=>{pending='tool-'+(++tools);send({id:pending,method:'item/tool/call',params:{threadId:'fixture-session',turnId:turn,callId:pending,tool:phase===0?'smart_write_file':'smart_run_command',arguments:phase===0?{path:'value.txt',content:'preserved'}:{command:'npm test'}}});};
+const call=()=>{pending='tool-'+(++tools);send({id:pending,method:'item/tool/call',params:{threadId:'fixture-session',turnId:turn,callId:pending,tool:phase===0?'smart_write_file':'smart_run_command',arguments:phase===0?{path:'value.txt',content:'preserved'}:{command:scenario==='direct-node'?'node --test test.mjs':'npm test'}}});};
 for await(const line of createInterface({input:process.stdin})){
  const m=JSON.parse(line);if(!m.method){if(m.id===pending){phase++;if(phase===1&&scenario!=='quota-after'&&scenario!=='write-only')call();else complete();}continue;}
  await fs.appendFile(root+'/methods.jsonl',JSON.stringify({method:m.method})+'\\n');if(m.id===undefined)continue;
@@ -52,6 +53,13 @@ for await(const line of createInterface({input:process.stdin})){
   return { root, backend, approvals };
 }
 describe('Codex native contract with deterministic subprocess', () => {
+  it('executes an explicitly approved direct Node check through the native protocol', async () => {
+    const { backend, approvals } = await fixture('direct-node'); await backend.probe();
+    const result = await backend.prompt(await backend.create(), 'fixture-model', 'Validate', 'validate', () => {});
+    expect(result.failure).toBeUndefined(); expect(result.validation).toBe('passed');
+    expect(result.toolEvents).toContainEqual(expect.objectContaining({ kind: 'command', exitCode: 0 }));
+    expect(approvals.filter(d => d.startsWith('bash: node --test test.mjs\n'))).toHaveLength(1);
+  });
   it('allows a human wait beyond 120 seconds without extending active work or wall limits', async () => {
     let entered!: () => void, answer!: (value: boolean) => void;
     const waiting = new Promise<void>(r => { entered = r; });

@@ -41,9 +41,10 @@ it('completes the prepared three-prompt pilot with multi-record subscription tel
         calls++;
         const broker = new NativeTools(project, stage, approve, new AbortController().signal);
         if (stage === 'implement') await broker.call('write_file', { path: 'index.mjs', content: "export const parseLines = input => input === '' ? [] : input.split(/\\r?\\n/);\n" });
-        if (stage === 'implement' || stage === 'validate') await broker.call('run_command', { command: 'npm test' });
+        if (stage === 'implement') await broker.call('run_command', { command: 'npm test' });
+        if (stage === 'implement' || stage === 'validate') await broker.call('run_command', { command: 'node --test test.mjs' });
         return {
-          text: 'Scripted fixture; only process evidence counts.', validation: broker.evidence.length ? 'passed' : 'none',
+          text: 'Scripted fixture; only process evidence counts.', validation: broker.evidence.some(e => e.endsWith(':failed')) ? 'failed' : broker.evidence.length ? 'passed' : 'none',
           evidence: broker.evidence, toolsExecuted: broker.touched, failure: broker.denied ? 'permission' : undefined,
           usage: Array.from({ length: 5 }, (_, i) => ({ messageId: `${calls}:${i}`, inputTokens: 10, outputTokens: 1, source: 'backend' as const })),
         };
@@ -51,14 +52,16 @@ it('completes the prepared three-prompt pilot with multi-record subscription tel
     } satisfies Backend));
     const factory = new Factory(store, engine, config, async details => {
       approvals.push(details);
-      return details.startsWith('edit: index.mjs\n') || details.startsWith('bash: npm test\n') || details.startsWith('Run ONE independent validation');
+      return details.startsWith('edit: index.mjs\n') || details.startsWith('bash: npm test\n') || details.startsWith('bash: node --test test.mjs\n') || details.startsWith('Run ONE independent validation');
     }, 'offline-fixture');
     const task = await factory.run(spec);
     expect(task.state).toBe('AWAITING_DELIVERY_APPROVAL'); expect(calls).toBe(3);
     expect(task.engineSummary).toMatchObject({ calls: 3, usageRecords: 15, apiSpentUsd: 0, subscriptionCostUsd: null });
     expect(task.checks).toHaveLength(1); expect(task.checks[0]).toMatchObject({ status: 'passed', exitCode: 0 });
     expect(approvals.filter(d => d.startsWith('edit:'))).toHaveLength(1);
-    expect(approvals.filter(d => d.startsWith('bash:'))).toHaveLength(2);
+    expect(approvals.filter(d => d.startsWith('bash:'))).toHaveLength(3);
+    expect(approvals.filter(d => d.startsWith('bash: node --test test.mjs\n'))).toHaveLength(2);
+    expect(task.approvals).toHaveLength(approvals.length);
     expect(approvals.filter(d => d.startsWith('Run ONE independent validation'))).toHaveLength(1);
     await expect(qualityGate(task)).resolves.toBeUndefined();
     expect((await git(task.workspace!.path, ['diff', '--name-only'])).trim()).toBe('index.mjs');

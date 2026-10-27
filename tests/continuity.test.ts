@@ -158,7 +158,7 @@ it('retains repair evidence and escalation counters across a quota handoff', asy
   expect(task.status).toBe('completed'); expect(task.stageCounters['2']!.escalations).toBe(1);
   expect(task.stages[1]!.decisions.map(d => d.tier)).toEqual(['balanced', 'balanced', 'balanced', 'deep']);
   expect(f.calls).toEqual(['codex', 'codex', 'codex', 'claude', 'claude', 'claude']);
-});
+}, 15000); // Six simulated prompts also perform real Git fingerprint checks under CI load.
 
 it('retains repair counters and prior failure evidence across explicit continuation', async () => {
   const f = await setup(); f.config.limits.maxModelCalls = 2;

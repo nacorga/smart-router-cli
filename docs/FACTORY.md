@@ -51,8 +51,12 @@ still require individual host approval. Validation has its own exact approval,
 outside model tools. Only direct supported checks are accepted: `node --test`,
 `npm test`, selected `npm run` checks, and narrow pnpm/yarn/pytest/cargo/go checks.
 Shell strings, installation commands, absolute command paths and traversal are
-rejected. Commands run without a shell, with bounded output, a 60-second per-check
+rejected. Independent checks run without a shell, with bounded output, a 60-second per-check
 limit, an owned POSIX process group, private HOME and filtered environment.
+Native tool commands and independent checks share the same direct-command
+allowlist, including `node --test test.mjs`. Both require their own exact approval.
+Extra runtime flags, preload/eval options, shell operators and unsupported argument
+variants are denied before asking for approval.
 Outputs are represented by digests, never persisted verbatim. A subsequent
 content change invalidates the checks. Cancellation requires exit/process-group
 evidence; uncertain termination retains the journal and locks for inspection.
