@@ -151,8 +151,10 @@ The original checkout must stay unchanged, the independent check must exit 0,
 checks must match the final content hash, and delivery must remain local.
 
 The prepared limits are three wrapper requests, five minutes, zero automatic
-repairs/escalations/retries and no API budget. Subscription usage is real usage;
-its monetary cost is unknown and these limits are not an invoice cap. Verify
+repairs/escalations/retries and no API budget. Subscription usage is real usage.
+Each native invocation is independently limited to eight agent steps. Multiple
+usage records within a subscription invocation do not consume extra wrapper requests.
+Its monetary cost is unknown and these limits are not an invoice cap. Verify
 provider billing settings and explicitly authorize this one pilot first.
 Then, in a terminal, set `SMART_STATE_DIR` to a private sibling outside all Git
 checkouts and run `factory run --spec <task.json> --config <config.json> --run`.

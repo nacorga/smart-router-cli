@@ -98,7 +98,9 @@ export class ContinuityController {
           const catalog = await this.active.catalog();
           for (const pending of task.stages.filter(s => s.status !== 'done')) select(task.id, pending, task.classification, local, catalog, chosen);
           const decision = select(task.id, stage, task.classification, local, catalog, chosen, counters.escalated); decision.destinationId = destination.id;
-          if (task.calls >= this.config.limits.maxModelCalls || task.usage.length >= this.config.limits.maxModelCalls || (destination.billing === 'api' && (task.spent >= task.budget || (decision.estimatedCostUsd !== undefined && task.spent + decision.estimatedCostUsd > task.budget)))) {
+          // Subscription usage notifications are telemetry, not additional wrapper prompts.
+          // Native adapters retain their independent eight-step limits; API guards stay conservative.
+          if (task.calls >= this.config.limits.maxModelCalls || (destination.billing === 'api' && (task.usage.length >= this.config.limits.maxModelCalls || task.spent >= task.budget || (decision.estimatedCostUsd !== undefined && task.spent + decision.estimatedCostUsd > task.budget)))) {
             task.status = 'blocked'; task.note = 'BUDGET_OR_CALL_LIMIT'; break;
           }
           if (await projectFingerprint(project) !== h.fingerprint) throw new Error('PROJECT_CHANGED_INSPECT_REQUIRED');

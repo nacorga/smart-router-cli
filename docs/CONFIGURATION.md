@@ -8,7 +8,7 @@ Set models.fast, models.balanced, and models.deep to tool-capable provider/model
 
 mode is auto or manual. Manual defaults to Balanced until an override is selected. /mode auto revokes the override; --deep-only forces Deep for comparison. --plan shows local decisions without calling a provider or verifying availability.
 
-limits.maxCostUsd controls new requests; maxModelCalls considers wrapper prompts and observed native turns. A native request can contain up to eight agent steps. The other limits bound repairs, escalations, and infrastructure retries. The general CLI cannot guarantee a hard invoice cap for an in-flight request.
+limits.maxCostUsd controls new API requests. maxModelCalls caps wrapper prompts across destinations and continuation. Subscription usage records do not count as additional prompts; native adapters independently limit each invocation to eight agent steps. API destinations retain the additional conservative guard on observed usage records. The other limits bound repairs, escalations, and infrastructure retries. The general CLI cannot guarantee a hard invoice cap for an in-flight request or subscription usage.
 
 Put OPENROUTER_API_KEY in the environment or the target project's .env. Only that variable is loaded; an existing environment value wins. Do not commit credentials or your real model configuration.
 
