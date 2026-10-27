@@ -12,6 +12,7 @@ import { preflight, createWorkspace, verifyWorkspace } from './workspace.js';
 import { qualityGate } from './quality-gate.js';
 import { validateTask } from './validation.js';
 import { approval, digest } from './approvals.js';
+import { awaitApproval } from '../approval.js';
 
 export class Factory {
   constructor(readonly store: FactoryStore, readonly engine: ExecutionEngine, readonly config: Config, readonly approve: ApprovalProvider = denyApproval, readonly mode: 'provider' | 'offline-fixture' = 'provider') {}
@@ -91,14 +92,15 @@ export class Factory {
     const poll = setInterval(() => { void access(this.cancelPath(task.id)).then(() => abort.abort()).catch(() => {}); }, 250);
     const stop = () => { if (handle) cancellation ??= handle.cancel().catch(() => false); };
     abort.signal.addEventListener('abort', stop);
-    const requestApproval: ApprovalProvider = async details => {
-      if (abort.signal.aborted) return false;
-      let cancel: (() => void) | undefined;
-      try {
-        return await Promise.race([this.approve(details), new Promise<boolean>(r => { cancel = () => r(false); abort.signal.addEventListener('abort', cancel, { once: true }); })]);
-      } finally { if (cancel) abort.signal.removeEventListener('abort', cancel); }
+    const engineApprovals = new AbortController(), pendingApprovals = new Set<Promise<boolean>>();
+    const requestApproval: ApprovalProvider = (details, signal) => awaitApproval(this.approve, details, signal ? AbortSignal.any([abort.signal, signal]) : abort.signal);
+    const approve: ApprovalProvider = (description, signal) => {
+      const operationSignal = AbortSignal.any([abort.signal, engineApprovals.signal, ...(signal ? [signal] : [])]);
+      const pending = approval(this.store, task, requestApproval, description, operationSignal);
+      pendingApprovals.add(pending);
+      void pending.then(() => pendingApprovals.delete(pending), () => pendingApprovals.delete(pending));
+      return pending;
     };
-    const approve: ApprovalProvider = description => approval(this.store, task, requestApproval, description);
     try {
       if (await access(this.cancelPath(task.id)).then(() => true).catch(() => false)) abort.abort();
       await verifyWorkspace(task.workspace!);
@@ -114,6 +116,7 @@ export class Factory {
       task.engineId = handle.taskId; await this.store.save(task);
       if (abort.signal.aborted) stop();
       const result = await handle.result;
+      engineApprovals.abort(); await Promise.allSettled([...pendingApprovals]);
       task.engineStatus = result.status; task.engineNote = result.note;
       task.engineSummary = { calls: result.calls, apiSpentUsd: result.unknownCost ? null : result.spent, subscriptionCostUsd: null, unknownCost: result.unknownCost, usageRecords: result.usage?.length ?? 0, stages: result.stages?.map(s => ({ kind: s.kind, status: s.status, models: s.decisions.map(d => d.modelId) })) ?? [] };
       if (result.status === 'cancelled' || abort.signal.aborted) {
@@ -137,7 +140,7 @@ export class Factory {
       if (!abort.signal.aborted) throw error;
       task.reason = 'INSPECTION_REQUIRED_CANCEL_UNCONFIRMED';
       await this.store.transition(task, 'CANCELLED', task.operation);
-    } finally { clearTimeout(timer); clearInterval(poll); abort.signal.removeEventListener('abort', stop); }
+    } finally { engineApprovals.abort(); await Promise.allSettled([...pendingApprovals]); clearTimeout(timer); clearInterval(poll); abort.signal.removeEventListener('abort', stop); }
   }
   private async validate(task: FactoryTask, approve: ApprovalProvider, signal: AbortSignal) {
     // Engine's own bounded repairs remain intact. Factory does not start a second repair loop.

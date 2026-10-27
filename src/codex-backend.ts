@@ -10,6 +10,8 @@ import { NativeTools } from './native-tools.js';
 import { smartTools } from './continuity-mcp.js';
 import { cachedCodexModels, codexPolicyArgs, codexPolicyVersions, featureNames, inactiveCodexMcp, verifyCodexPolicy } from './codex-policy.js';
 import { parseReview } from './opencode.js';
+import { awaitApproval, type ApprovalProvider } from './approval.js';
+import { NativeTurnDeadline } from './native-deadline.js';
 const exec = promisify(execFile);
 const observed = (state: Availability['state'], source: string): Availability => ({ state, source, observedAt: new Date().toISOString() });
 const dynamicTools = smartTools.filter(t => t.name !== 'permission').map(t => ({ name: 'smart_' + t.name, description: t.description, inputSchema: t.inputSchema }));
@@ -26,7 +28,7 @@ export class CodexBackend implements Backend {
   private sessions = new Set<string>();
   private active?: { session: string; turn?: string; abort: AbortController };
   private operations = new Set<Promise<unknown>>();
-  constructor(readonly destination: Destination, readonly directory: string, readonly approve: (description: string) => Promise<boolean> = async () => false) {}
+  constructor(readonly destination: Destination, readonly directory: string, readonly approve: ApprovalProvider = async () => false) {}
   private providerArgs() {
     // A fresh provider ID prevents inherited user provider settings from redirecting subscription traffic.
     return ['-c', `model_provider="${this.provider}"`, '-c', `model_providers.${this.provider}={name="OpenAI",base_url="https://chatgpt.com/backend-api/codex",wire_api="responses",requires_openai_auth=true,supports_websockets=false,request_max_retries=0,stream_max_retries=0}`];
@@ -109,13 +111,13 @@ export class CodexBackend implements Backend {
     const auth = await rpc.request('account/read', { refreshToken: false });
     if (auth.account?.type !== 'chatgpt') return { text: '', usage: [], validation: 'none', evidence: [], failure: 'authentication', toolsExecuted: false };
     const active = this.active = { session, turn: undefined as string | undefined, abort: new AbortController() };
-    const broker = new NativeTools(this.directory, stage, this.approve, active.abort.signal);
     const usage: Usage[] = [], messages = new Map<string, string>(), calls = new Set<string>(); let steps = 0, limited = false, finalAnswerSeen = false, final: any;
     let resolve!: () => void, reject!: (error: Error) => void;
     const terminal = new Promise<void>((r, e) => { resolve = r; reject = e; });
     // Attach a rejection handler before awaiting turn/start; early closure cannot become unhandled.
     void terminal.catch(() => {});
-    const timeout = setTimeout(() => reject(new Error('CODEX_TURN_TIMEOUT')), 120000);
+    const deadline = new NativeTurnDeadline(code => { active.abort.abort(); reject(new Error(code)); });
+    const broker = new NativeTools(this.directory, stage, (description, signal) => deadline.approval(() => awaitApproval(this.approve, description, signal)), active.abort.signal);
     rpc.onClose = () => reject(new Error('CODEX_STREAM_CLOSED'));
     rpc.onNotification = (method, params) => {
       if (params?.threadId !== session) return;
@@ -151,7 +153,7 @@ export class CodexBackend implements Backend {
         failure: uncertain ? 'uncertain' : broker.denied ? 'permission' : limited || steps > 8 ? 'limit' : quota ? 'quota' : info === 'unauthorized' ? 'authentication' : final.status === 'failed' ? 'infrastructure' : undefined,
         reviewVerdict: stage === 'review' ? parseReview(text) : undefined };
     } finally {
-      clearTimeout(timeout); active.abort.abort(); await Promise.allSettled([...this.operations]); rpc.onRequest = undefined; rpc.onNotification = undefined; rpc.onClose = undefined; this.active = undefined;
+      deadline.dispose(); active.abort.abort(); await Promise.allSettled([...this.operations]); rpc.onRequest = undefined; rpc.onNotification = undefined; rpc.onClose = undefined; this.active = undefined;
     }
   }
   async abort(session: string) {

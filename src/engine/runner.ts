@@ -5,6 +5,7 @@ import { Store } from '../state.js';
 import { requireConfigured, validateConfig } from '../config.js';
 import type { Backend, Config, Destination, Task } from '../types.js';
 import { createBackend, denyApproval, type ApprovalProvider } from './backend-factory.js';
+import { awaitApproval } from '../approval.js';
 
 export interface EngineEvent {
   taskId: string; timestamp: string;
@@ -46,10 +47,10 @@ export class SmartEngine implements ExecutionEngine {
       // Observer failures cannot change execution or authorization.
       try { input.onEvent?.({ ...event, taskId, timestamp: new Date().toISOString() }); } catch { /* observer only */ }
     };
-    const approve: ApprovalProvider = async description => {
+    const approve: ApprovalProvider = async (description, signal) => {
       emit({ type: 'approval-requested' });
       let granted = false;
-      try { granted = await (input.approvals ?? denyApproval)(description) === true; } catch { /* fail closed */ }
+      granted = await awaitApproval(input.approvals ?? denyApproval, description, signal);
       emit({ type: granted ? 'approval-granted' : 'approval-denied' }); return granted;
     };
     const parent = this.store;

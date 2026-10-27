@@ -32,11 +32,12 @@ export async function main(args = process.argv.slice(2)) {
   const id = args.shift(); if (args.length || id?.startsWith('-')) throw new Error('Unknown arguments; see --help');
   const store = new FactoryStore();
   let terminal: ReturnType<typeof createInterface> | undefined;
-  const approve: ApprovalProvider = async description => {
+  const approve: ApprovalProvider = async (description, signal) => {
+    if (signal?.aborted) return false;
     console.log(description);
     if (!process.stdin.isTTY || !process.stdout.isTTY) { console.log('Denied: an interactive terminal is required.'); return false; }
     terminal ??= createInterface({ input: process.stdin, output: process.stdout });
-    try { return /^(yes|sí|si)$/i.test((await terminal.question('Approve ONE displayed operation? yes/no: ')).trim()); } catch { return false; }
+    try { return /^(yes|sí|si)$/i.test((await terminal.question('Approve ONE displayed operation? yes/no: ', { signal })).trim()) && !signal?.aborted; } catch { return false; }
   };
   try {
     if (command === 'demo') {
@@ -49,14 +50,14 @@ export async function main(args = process.argv.slice(2)) {
       spec.repository.path = resolve(spec.repository.path);
       const config = await loadConfig(spec.repository.path, configPath);
       const engine = new SmartEngine(new Store(join(store.root, 'engine'), store.projectLockRoot));
-      const factory = new Factory(store, engine, config, async description => description.startsWith('Authorize ONE Smart Router') && !run ? false : approve(description));
+      const factory = new Factory(store, engine, config, async (description, signal) => description.startsWith('Authorize ONE Smart Router') && !run ? false : approve(description, signal));
       const result = await factory.run(spec); console.log(JSON.stringify({ id: result.id, state: result.state, workspace: result.workspace?.path, reason: result.reason, originalChangesExcluded: result.workspace?.originalDirty }, null, 2));
       if (!['AWAITING_DELIVERY_APPROVAL', 'READY_LOCAL'].includes(result.state)) process.exitCode = 1;
       return;
     }
     if (!id || specPath) throw new Error('Task ID required; see --help');
     const task = await store.get(id);
-    const factory = new Factory(store, new SmartEngine(new Store(join(store.root, 'engine'), store.projectLockRoot)), command === 'continue' ? await loadConfig(task.workspace!.repository, configPath) : structuredClone(defaults), async description => description.startsWith('Authorize ONE Smart Router') && !run ? false : approve(description), task.mode);
+    const factory = new Factory(store, new SmartEngine(new Store(join(store.root, 'engine'), store.projectLockRoot)), command === 'continue' ? await loadConfig(task.workspace!.repository, configPath) : structuredClone(defaults), async (description, signal) => description.startsWith('Authorize ONE Smart Router') && !run ? false : approve(description, signal), task.mode);
     if (command === 'inspect') console.log(JSON.stringify(await factory.inspect(id), null, 2));
     else if (command === 'status') { const t = await factory.inspect(id); console.log(JSON.stringify({ id: t.id, state: t.state, mode: t.mode, reason: t.reason, engineStatus: t.engineStatus, engineNote: t.engineNote, checks: t.checks.map(c => ({ status: c.status, exitCode: c.exitCode })), operation: t.operation?.kind, events: t.events }, null, 2)); }
     else if (command === 'cancel') { const t = await factory.cancel(id); console.log(JSON.stringify({ id, state: t.state, reason: t.reason }, null, 2)); }

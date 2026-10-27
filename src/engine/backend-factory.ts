@@ -1,9 +1,10 @@
 import { loadLocalEnv } from '../env.js';
 import { OpenCodeBackend } from '../opencode.js';
 import type { Backend, Destination } from '../types.js';
+import type { ApprovalProvider } from '../approval.js';
 
 /** Supplied by the trusted host, never by a task or model. */
-export type ApprovalProvider = (description: string) => Promise<boolean>;
+export type { ApprovalProvider } from '../approval.js';
 export const denyApproval: ApprovalProvider = async () => false;
 export async function createBackend(d: Destination, project: string, approve: ApprovalProvider = denyApproval): Promise<Backend> {
   if (d.backend === 'codex') return new (await import('../native-backends.js')).CodexBackend(d, project, approve);

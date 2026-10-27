@@ -4,6 +4,11 @@ import { join } from 'node:path';
 import { fixture } from './factory-helpers.js';
 import { git } from '../src/factory/workspace.js';
 import { digest } from '../src/factory/approvals.js';
+import { SmartEngine } from '../src/engine/index.js';
+import { Store } from '../src/state.js';
+import { Factory } from '../src/factory/orchestrator.js';
+import { NativeTools } from '../src/native-tools.js';
+import type { ApprovalProvider } from '../src/approval.js';
 
 it.each(['allow', 'deny', 'throw'] as const)('journals one decision and executes validation only when approved: %s', async mode => {
   const displayed: string[] = [];
@@ -35,6 +40,42 @@ it.each(['allow', 'deny', 'throw'] as const)('journals one decision and executes
       await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' });
     }
   } finally { await f.cleanup(); }
+}, 20000);
+
+it('closes the durable approval before returning an uncertain backend result and ignores a late yes', async () => {
+  let entered!: () => void, answer!: (value: boolean) => void, hostSignal: AbortSignal | undefined;
+  const shown = new Promise<void>(r => { entered = r; });
+  const provider: ApprovalProvider = async (_description, signal) => {
+    hostSignal = signal; entered(); return new Promise<boolean>(r => { answer = r; });
+  };
+  const f = await fixture('expired-native-approval');
+  f.config.schemaVersion = 2; f.config.destinations = [{ id: 'scripted', backend: 'codex', billing: 'subscription', models: f.config.models }];
+  let calls = 0;
+  const engine = new SmartEngine(new Store(join(f.store.root, 'engine'), f.store.projectLockRoot), async (_destination, project, approve) => ({
+    catalog: async () => Object.values(f.config.models).map(id => ({ id, tools: true, context: 64000 })),
+    create: async () => 'scripted-session', abort: async () => true, close() {},
+    prompt: async (_session, _model, _prompt, stage) => {
+      calls++; const signal = new AbortController(); const broker = new NativeTools(project, stage, approve, signal.signal);
+      if (stage === 'implement') {
+        const operation = broker.call('write_file', { path: 'index.mjs', content: 'late write must never happen' });
+        await shown; signal.abort(); await operation;
+      }
+      return { text: '', usage: [], evidence: [], validation: 'none', toolsExecuted: false, ...(stage === 'implement' ? { failure: 'uncertain' } : {}) };
+    },
+  }));
+  const factory = new Factory(f.store, engine, f.config, provider, 'offline-fixture');
+  try {
+    const task = await factory.run(f.spec);
+    expect(task.state).toBe('BLOCKED'); expect(hostSignal?.aborted).toBe(true);
+    expect(task.approvals).toHaveLength(1); expect(task.approvals[0]).toMatchObject({ granted: false, reason: 'ABORTED' });
+    expect(task.events.filter(e => e.type === 'approval-requested')).toHaveLength(1);
+    expect(task.events.filter(e => e.type === 'approval-denied')).toHaveLength(1);
+    expect(await readFile(join(task.workspace!.path, 'index.mjs'), 'utf8')).toBe('export const sum = (a, b) => 0;\n');
+    const saved = await readFile(join(f.store.root, task.id + '.json'), 'utf8');
+    answer(true); await new Promise(r => setImmediate(r));
+    expect(await readFile(join(f.store.root, task.id + '.json'), 'utf8')).toBe(saved);
+    await expect(factory.continue(task.id)).rejects.toThrow('INSPECTION_REQUIRED'); expect(calls).toBe(2);
+  } finally { answer?.(false); await f.cleanup(); }
 }, 20000);
 
 it('journals pending validation once and denies it on cancellation even if the host approves later', async () => {

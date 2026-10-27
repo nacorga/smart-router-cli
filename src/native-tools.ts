@@ -6,13 +6,14 @@ import type { StageKind, ToolEvent } from './types.js';
 import { safeProjectPath, secretPath } from './continuity-state.js';
 import { forbiddenCommand } from './safety.js';
 import { runOwnedValidation } from './native-transport.js';
+import { awaitApproval, type ApprovalProvider } from './approval.js';
 const exec = promisify(execFile);
 const directValidation = /^(?:npm (?:test|run (?:test(?::[A-Za-z0-9_-]+)?|check|lint|type-?check))|pnpm (?:test|lint|typecheck)|yarn (?:test|lint|typecheck)|pytest|cargo test|go test)(?: [A-Za-z0-9_./:=@-]+)*$/;
 /** Both native adapters execute exactly this policy; transport permission grants cannot authorize an operation. */
 export class NativeTools {
   touched = false; denied = false; uncertain = false; evidence: string[] = []; events: ToolEvent[] = [];
   private active = false;
-  constructor(readonly directory: string, readonly stage: StageKind, readonly approve: (description: string) => Promise<boolean>, readonly signal: AbortSignal) {}
+  constructor(readonly directory: string, readonly stage: StageKind, readonly approve: ApprovalProvider, readonly signal: AbortSignal) {}
   async call(name: string, args: Record<string, any>) {
     if (this.active) { this.denied = true; return { isError: true, content: [{ type: 'text', text: 'Concurrent operation denied' }] }; }
     this.active = true;
@@ -55,9 +56,6 @@ export class NativeTools {
     finally { this.active = false; }
   }
   private async approveOnce(description: string) {
-    if (this.signal.aborted) return false;
-    let cancel: (() => void) | undefined;
-    try { return await Promise.race([this.approve(description), new Promise<boolean>(r => { cancel = () => r(false); this.signal.addEventListener('abort', cancel, { once: true }); })]); }
-    finally { if (cancel) this.signal.removeEventListener('abort', cancel); }
+    return awaitApproval(this.approve, description, this.signal);
   }
 }

@@ -54,7 +54,7 @@ export async function validateTask(store: FactoryStore, task: FactoryTask, appro
   for (const command of task.spec.validation.commands) {
     const started = Date.now();
     const check: ValidationCheck = { command, status: 'blocked', exitCode: null, startedAt: new Date(started).toISOString(), durationMs: 0, contentHash: before, evidenceDigest: digest('') };
-    if (!await approval(store, task, approve, `Run ONE independent validation on trusted local code (no OS sandbox): ${JSON.stringify(command)} in ${task.workspace!.path}; content ${before}`)) check.reason = 'PERMISSION_DENIED';
+    if (!await approval(store, task, approve, `Run ONE independent validation on trusted local code (no OS sandbox): ${JSON.stringify(command)} in ${task.workspace!.path}; content ${before}`, signal)) check.reason = 'PERMISSION_DENIED';
     else {
       await scopeCheck(task);
       if (await contentHash(task.workspace!.path) !== before) throw new Error('VALIDATION_STALE_AFTER_APPROVAL');

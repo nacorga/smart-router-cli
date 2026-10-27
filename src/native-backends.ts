@@ -13,6 +13,7 @@ import { JsonLines, subscriptionEnvironment } from './native-transport.js';
 import { NativeTools } from './native-tools.js';
 import { claudeSettings, supportedClaudeVersion, verifyClaudeTools } from './claude-policy.js';
 import { claudeQuota } from './claude-quota.js';
+import type { ApprovalProvider } from './approval.js';
 import { parseReview } from './opencode.js';
 import { stopChild } from './server.js';
 const exec = promisify(execFile);
@@ -32,7 +33,7 @@ export class ClaudeBackend implements Backend {
   private disabledPlugins: string[] = [];
   private requestAbort?: AbortController;
   private operation?: Promise<void>;
-  constructor(readonly destination: Destination, readonly directory: string, readonly approve: (description: string) => Promise<boolean>) {}
+  constructor(readonly destination: Destination, readonly directory: string, readonly approve: ApprovalProvider) {}
   async probe(): Promise<BackendProbe> {
     try {
       const version = (await exec(this.destination.executable ?? 'claude', ['--version'], { env: subscriptionEnvironment(), timeout: 10000 })).stdout.trim();

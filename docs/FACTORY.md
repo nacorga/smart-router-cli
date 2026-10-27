@@ -56,6 +56,12 @@ limit, an owned POSIX process group, private HOME and filtered environment.
 Outputs are represented by digests, never persisted verbatim. A subsequent
 content change invalidates the checks. Cancellation requires exit/process-group
 evidence; uncertain termination retains the journal and locks for inspection.
+The overall task deadline includes human approval waits. Codex separately limits
+active turn work to 120 seconds, pausing that clock only while host approval is
+pending, with a non-resettable five-minute wall limit per turn. The task deadline
+still takes precedence. Timeout or cancellation expires the exact pending approval;
+late answers cannot authorize writes or commands. Aborted approvals are recorded
+with `granted: false` and `reason: "ABORTED"`, rather than left open.
 
 **Approve only trusted local code.** Tests can execute repository code and access
 the host filesystem, including secrets left in the repository. Worktrees and
@@ -127,8 +133,13 @@ Import `SmartEngine` and its declared input/result types from
 `smart-router-cli/dist/engine/index.js` (or the source module during development).
 The trusted host obtains inference consent before calling `run`, supplies a
 concrete `approvals(description)` function and receives `{ taskId, result,
-cancel }`. Tool approval defaults to denial. `inspect(id, canonicalProject)`
-loads metadata without replay; `continue(id, input)` accepts portable checkpoints
+cancel }`. Tool approval defaults to denial.
+The approval callback may also accept an optional second `AbortSignal` to dismiss
+its UI when that operation expires. Existing one-argument callbacks remain
+supported; their late results are ignored. Factory waits for pending approval
+journals to settle before persisting the terminal task result.
+`inspect(id, canonicalProject)` loads metadata without replay;
+`continue(id, input)` accepts portable checkpoints
 only. Typed task/stage/routing/approval/result events omit prompts, operation
 contents and streamed model output. Observer exceptions cannot grant permission
 or alter execution. Always await `result` after requesting cancellation; the
