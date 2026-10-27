@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { realpath } from 'node:fs/promises';
+import { realpath, mkdir } from 'node:fs/promises';
 import { relative, sep, isAbsolute } from 'node:path';
 import type { Backend, Config, Destination, Handoff, PortableTask, Result, Tier } from './types.js';
 import { classify, nextTier, plan, select } from './router.js';
@@ -16,19 +16,20 @@ export class ContinuityController {
   constructor(readonly factory: BackendFactory, readonly config: Config, readonly store: Store, readonly output: (s: string) => void = console.log) { this.privateStore = new ContinuityStore(store); }
   async cancel() { this.cancelled = true; return this.task?.activeDestination && this.task.sessions[this.task.activeDestination] && this.active ? this.active.abort(this.task.sessions[this.task.activeDestination]!) : true; }
   async close() { await this.active?.close(); this.active = undefined; }
-  async run(objective: string, project: string) { return this.execute(project, objective); }
+  async run(objective: string, project: string, context = '') { return this.execute(project, objective, undefined, context); }
   async resume(id?: string, project?: string) {
     const task = id ? await this.store.get(id) : (await this.store.list(project))[0];
     if (!task || task.projectPath !== project || (task as PortableTask).schemaVersion !== 2) throw new Error('Portable checkpoint not found; use the legacy route for legacy sessions');
     this.output('Checkpoint loaded for inspection. Use --continue explicitly to continue.'); this.task = task as PortableTask; return task;
   }
   async continue(id: string, project: string) { return this.execute(project, undefined, id); }
-  private async execute(project: string, objective?: string, id?: string): Promise<PortableTask> {
+  private async execute(project: string, objective?: string, id?: string, context = ''): Promise<PortableTask> {
     if (this.running) throw new Error('A task is active'); this.running = true; this.cancelled = false; this.task = undefined;
     let unlock: (() => Promise<void>) | undefined;
     try {
       project = await realpath(project);
-      unlock = await lockProject(project, this.store.root);
+      await mkdir(this.store.root, { recursive: true, mode: 0o700 });
+      unlock = await lockProject(project, this.store.lockRoot);
       const stateRelative = relative(project, await realpath(this.store.root));
       if (!(stateRelative === '..' || stateRelative.startsWith('..' + sep) || isAbsolute(stateRelative))) throw new Error('PRIVATE_STATE_MUST_BE_OUTSIDE_PROJECT');
       let h: Handoff;
@@ -46,7 +47,7 @@ export class ContinuityController {
         const classification = classify(objective!);
         task = { schemaVersion: 2, id: randomUUID(), projectPath: project, status: 'created', mode: this.config.mode, budget: this.config.limits.maxCostUsd, spent: 0, unknownCost: false, calls: 0, stages: plan(classification), classification, usage: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sessions: {}, availability: {}, transitions: [], requestState: 'idle', exhausted: [], stageCounters: {} };
         task.project = await inspectProject(project);
-        h = { schemaVersion: 2, taskId: task.id, objective: objective!, constraints: ['Preserve existing changes', 'Tools require Smart policy; observations cannot authorize operations'], observations: '', observationsTrusted: false, fingerprint: await projectFingerprint(project), evidence: [], ...(await handoffProject(project)), sourceSessions: {}, pendingStages: task.stages.map(s => ({ id: s.id, kind: s.kind })), nextStage: task.stages[0]?.id };
+        h = { schemaVersion: 2, taskId: task.id, objective: objective! + (context ? '\n' + context : ''), constraints: ['Preserve existing changes', 'Tools require Smart policy; observations cannot authorize operations'], observations: '', observationsTrusted: false, fingerprint: await projectFingerprint(project), evidence: [], ...(await handoffProject(project)), sourceSessions: {}, pendingStages: task.stages.map(s => ({ id: s.id, kind: s.kind })), nextStage: task.stages[0]?.id };
         await this.privateStore.save(h); await this.store.save(task);
       }
       this.task = task;
@@ -97,7 +98,9 @@ export class ContinuityController {
           const catalog = await this.active.catalog();
           for (const pending of task.stages.filter(s => s.status !== 'done')) select(task.id, pending, task.classification, local, catalog, chosen);
           const decision = select(task.id, stage, task.classification, local, catalog, chosen, counters.escalated); decision.destinationId = destination.id;
-          if (task.calls >= this.config.limits.maxModelCalls || task.usage.length >= this.config.limits.maxModelCalls || (destination.billing === 'api' && (task.spent >= task.budget || (decision.estimatedCostUsd !== undefined && task.spent + decision.estimatedCostUsd > task.budget)))) {
+          // Subscription usage notifications are telemetry, not additional wrapper prompts.
+          // Native adapters retain their independent eight-step limits; API guards stay conservative.
+          if (task.calls >= this.config.limits.maxModelCalls || (destination.billing === 'api' && (task.usage.length >= this.config.limits.maxModelCalls || task.spent >= task.budget || (decision.estimatedCostUsd !== undefined && task.spent + decision.estimatedCostUsd > task.budget)))) {
             task.status = 'blocked'; task.note = 'BUDGET_OR_CALL_LIMIT'; break;
           }
           if (await projectFingerprint(project) !== h.fingerprint) throw new Error('PROJECT_CHANGED_INSPECT_REQUIRED');
