@@ -1,6 +1,8 @@
-/** Verified against Claude Code 2.1.303, including its built-in plugin defaults. */
+/** Exact native profiles verified with the closed-tool loopback smoke. */
+export const claudePolicyVersions = ['2.1.303 (Claude Code)', '2.1.310 (Claude Code)'] as const;
+export const supportedClaudeVersion = (version: string) => claudePolicyVersions.some(verified => verified === version);
 export function claudeSettings(pluginIds: string[] = []) {
-  return { disableAllHooks: true, hooks: {}, enabledPlugins: Object.fromEntries(['cc-plugin-agents-md@builtin', 'cc-plugin-plugin-authoring@builtin', 'cc-plugin-telemetry@builtin', ...pluginIds].map(id => [id, false])), permissions: { defaultMode: 'default' } };
+  return { env: { ENABLE_TOOL_SEARCH: 'false' }, disableAllHooks: true, hooks: {}, enabledPlugins: Object.fromEntries(['cc-plugin-agents-md@builtin', 'cc-plugin-plugin-authoring@builtin', 'cc-plugin-telemetry@builtin', ...pluginIds].map(id => [id, false])), permissions: { defaultMode: 'default' } };
 }
 export function verifyClaudeTools(event: Record<string, any>, model: string) {
   const allowed = new Set(['mcp__smart__permission', 'mcp__smart__read_file', 'mcp__smart__list_files', 'mcp__smart__write_file', 'mcp__smart__run_command']);

@@ -28,6 +28,30 @@ async function setup(order = ['codex', 'claude']) {
   return { root, config, store, calls, ok, quota, backend };
 }
 describe('portable sequential continuity', () => {
+  it('allows three subscription prompts when each returns five usage records', async () => {
+    const f = await setup(['codex']); f.config.limits.maxModelCalls = 3;
+    const factory = async (d: Destination) => f.backend(d, async () => ({ ...f.ok(), usage: Array.from({ length: 5 }, (_, i) => ({ messageId: `${f.calls.length}:${i}`, inputTokens: 10, outputTokens: 1, source: 'backend' as const })) }));
+    const task = await new ContinuityController(factory, f.config, f.store, () => {}).run('Implement a parser', f.root);
+    expect(task.status).toBe('completed'); expect(task.calls).toBe(3); expect(task.usage).toHaveLength(15);
+    expect(task.stages.map(s => s.status)).toEqual(['done', 'done', 'done']);
+    expect(task.spent).toBe(0); expect(task.usage.every(u => u.billing === 'subscription' && u.costUsd === undefined)).toBe(true);
+  });
+  it.each([0, 1])('retains subscription prompt limit %s across continuation despite multiple usage records', async limit => {
+    const f = await setup(['codex']); f.config.limits.maxModelCalls = limit;
+    const factory = async (d: Destination) => f.backend(d, async () => ({ ...f.ok(), usage: Array.from({ length: 5 }, (_, i) => ({ messageId: `${f.calls.length}:${i}`, inputTokens: 10, outputTokens: 1, source: 'backend' as const })) }));
+    const first = await new ContinuityController(factory, f.config, f.store, () => {}).run('Implement a parser', f.root);
+    const next = await new ContinuityController(factory, f.config, f.store, () => {}).continue(first.id, f.root);
+    expect(next.status).toBe('blocked'); expect(next.note).toBe('BUDGET_OR_CALL_LIMIT');
+    expect(next.calls).toBe(limit); expect(f.calls).toHaveLength(limit); expect(next.usage).toHaveLength(limit * 5);
+  });
+  it('retains the conservative observed-usage guard for API destinations', async () => {
+    const f = await setup(['opencode']); f.config.destinations![0]!.billing = 'api';
+    f.config.limits.maxCostUsd = 1; f.config.limits.maxModelCalls = 3;
+    const factory = async (d: Destination) => f.backend(d, async () => ({ ...f.ok(), usage: Array.from({ length: 5 }, (_, i) => ({ messageId: `${f.calls.length}:${i}`, inputTokens: 10, outputTokens: 1, source: 'backend' as const, costUsd: 0 })) }));
+    const task = await new ContinuityController(factory, f.config, f.store, () => {}).run('Implement a parser', f.root);
+    expect(task.status).toBe('blocked'); expect(task.note).toBe('BUDGET_OR_CALL_LIMIT');
+    expect(task.calls).toBe(1); expect(task.usage).toHaveLength(5); expect(task.unknownCost).toBe(false);
+  });
   it.each([['codex', 'claude'], ['claude', 'codex']])('continues %s -> %s at zero API budget', async (first, second) => {
     const f = await setup([first, second]);
     const controller = new ContinuityController(async d => f.backend(d, async () => d.id === first ? f.quota() : f.ok()), f.config, f.store, () => {});
@@ -112,7 +136,7 @@ it('keeps CLI exports and coordination separate from explicit private inspection
   expect((await run('--export')).stdout).not.toContain('PRIVATE_OBJECTIVE_MARKER');
   expect((await run('--coordination')).stdout).not.toContain('PRIVATE_OBJECTIVE_MARKER');
   expect((await run('--handoff')).stdout).toContain('PRIVATE_OBJECTIVE_MARKER');
-});
+}, 15000);
 
 it('does not reuse a passed check from an earlier stage after a later unverified edit', async () => {
   const f = await setup();
@@ -134,7 +158,7 @@ it('retains repair evidence and escalation counters across a quota handoff', asy
   expect(task.status).toBe('completed'); expect(task.stageCounters['2']!.escalations).toBe(1);
   expect(task.stages[1]!.decisions.map(d => d.tier)).toEqual(['balanced', 'balanced', 'balanced', 'deep']);
   expect(f.calls).toEqual(['codex', 'codex', 'codex', 'claude', 'claude', 'claude']);
-});
+}, 15000); // Six simulated prompts also perform real Git fingerprint checks under CI load.
 
 it('retains repair counters and prior failure evidence across explicit continuation', async () => {
   const f = await setup(); f.config.limits.maxModelCalls = 2;

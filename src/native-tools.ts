@@ -6,13 +6,14 @@ import type { StageKind, ToolEvent } from './types.js';
 import { safeProjectPath, secretPath } from './continuity-state.js';
 import { forbiddenCommand } from './safety.js';
 import { runOwnedValidation } from './native-transport.js';
+import { awaitApproval, type ApprovalProvider } from './approval.js';
+import { validateCommand } from './validation-command.js';
 const exec = promisify(execFile);
-const directValidation = /^(?:npm (?:test|run (?:test(?::[A-Za-z0-9_-]+)?|check|lint|type-?check))|pnpm (?:test|lint|typecheck)|yarn (?:test|lint|typecheck)|pytest|cargo test|go test)(?: [A-Za-z0-9_./:=@-]+)*$/;
 /** Both native adapters execute exactly this policy; transport permission grants cannot authorize an operation. */
 export class NativeTools {
   touched = false; denied = false; uncertain = false; evidence: string[] = []; events: ToolEvent[] = [];
   private active = false;
-  constructor(readonly directory: string, readonly stage: StageKind, readonly approve: (description: string) => Promise<boolean>, readonly signal: AbortSignal) {}
+  constructor(readonly directory: string, readonly stage: StageKind, readonly approve: ApprovalProvider, readonly signal: AbortSignal) {}
   async call(name: string, args: Record<string, any>) {
     if (this.active) { this.denied = true; return { isError: true, content: [{ type: 'text', text: 'Concurrent operation denied' }] }; }
     this.active = true;
@@ -37,9 +38,11 @@ export class NativeTools {
         try { await writeFile(path, args.content); } catch { this.uncertain = true; throw new Error('Write outcome uncertain'); }
         this.events.push({ id: randomUUID(), kind: 'write', status: 'completed' }); output = 'Written';
       } else if (name === 'run_command') {
-        if (!mutable || typeof args.command !== 'string' || !directValidation.test(args.command) || forbiddenCommand(args.command)) throw new Error('Command denied');
+        if (!mutable || typeof args.command !== 'string' || forbiddenCommand(args.command)) throw new Error('Command denied');
+        const [command, ...argv] = args.command.split(' ');
+        validateCommand({ executable: command, args: argv, required: true });
         if (!await this.approveOnce(`bash: ${args.command}\n${JSON.stringify({ command: args.command, workdir: this.directory })}`)) throw new Error('Permission denied');
-        const [command, ...argv] = args.command.split(' '); this.touched = true;
+        this.touched = true;
         const result = await runOwnedValidation(command!, argv, this.directory, this.signal).catch(() => { this.uncertain = true; throw new Error('Command outcome uncertain'); });
         const commandHash = createHash('sha256').update(args.command).digest('hex');
         this.events.push({ id: randomUUID(), kind: 'command', status: result.exit === 0 ? 'completed' : 'failed', commandHash, exitCode: result.exit });
@@ -55,9 +58,6 @@ export class NativeTools {
     finally { this.active = false; }
   }
   private async approveOnce(description: string) {
-    if (this.signal.aborted) return false;
-    let cancel: (() => void) | undefined;
-    try { return await Promise.race([this.approve(description), new Promise<boolean>(r => { cancel = () => r(false); this.signal.addEventListener('abort', cancel, { once: true }); })]); }
-    finally { if (cancel) this.signal.removeEventListener('abort', cancel); }
+    return awaitApproval(this.approve, description, this.signal);
   }
 }

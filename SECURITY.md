@@ -26,3 +26,13 @@ The benchmark runner deliberately retains generated solutions and usage for eval
 - Unknown costs remain unknown. A proven local pre-provider denial has zero incremental provider cost and is classified as a local limit, not a model implementation failure.
 
 Use a disposable checkout for initial experiments and configure provider-side spending limits.
+
+## Factory orchestration
+
+Factory TaskSpecs cannot grant tool or publication permissions. Independent checks
+and commit/push/Draft PR each require explicit host approval; noninteractive use
+denies them. Factory worktrees and filtered validation environments are not an OS
+sandbox. Approve checks only for trusted local repositories without production
+credentials. Private task state includes objectives and operational paths; never
+share raw inspection output. Uncertain operations retain inspection guards and are
+not automatically replayed. See [Factory boundaries](docs/FACTORY.md).

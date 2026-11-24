@@ -108,3 +108,10 @@ Useful feedback includes a reproducible task, expected behavior, version/platfor
 An opt-in version 2 configuration adds sequential destinations and private continuation checkpoints. Existing OpenCode/OpenRouter configurations are unchanged. Start with `smart --init --subscriptions`, configure native models, and inspect `smart --backends` without inference.
 
 **Experimental continuity:** both adapters use closed Smart tools and have deterministic process-contract coverage, including bidirectional handoffs. An authorized real pilot passed for Codex alone, Claude alone, and a deliberate Codex → Claude handoff on one isolated addition fixture, preserving existing work and independently validating the result. Further real fixture checks passed for the reverse handoff, cross-process continuation, cancellation during validation, and permission rejection in both backends. Real quota exhaustion and broader real tasks remain unvalidated. Read [continuity status, permissions, and recovery](docs/CONTINUITY.md) before enabling this experimental route.
+
+## Local Factory MVP
+
+`factory` adds isolated task worktrees, independent approved checks and an optional
+explicitly authorized Draft PR. Start with `factory --help` or `factory demo`; see
+[Factory setup, permissions and offline demonstration](docs/FACTORY.md). This MVP
+is tested with scripted fixtures, not validated in production.

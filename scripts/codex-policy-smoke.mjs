@@ -5,14 +5,16 @@ import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RpcProcess, subscriptionEnvironment } from '../dist/native-transport.js';
-import { featureNames, codexPolicyArgs, codexPolicyVersion, inactiveCodexMcp, restrictedCodexModel, verifyCodexPolicy } from '../dist/codex-policy.js';
+import { featureNames, codexPolicyArgs, codexPolicyVersions, inactiveCodexMcp, restrictedCodexModel, verifyCodexPolicy } from '../dist/codex-policy.js';
 import { NativeTools } from '../dist/native-tools.js';
 import { smartTools } from '../dist/continuity-mcp.js';
 // The installed native binary talks ONLY to a deterministic loopback Responses server.
 // No account, auth file, model cache, external inference, or real model credential is used.
 const executable = process.env.SMART_CODEX_EXECUTABLE ?? 'codex';
 const version = execFileSync(executable, ['--version'], { encoding: 'utf8', env: subscriptionEnvironment() }).trim();
-assert.equal(version, codexPolicyVersion);
+const candidate = process.argv[2] === '--candidate-version' && process.argv.length === 4 ? process.argv[3] : undefined;
+assert.ok(process.argv.length === 2 || candidate, 'Use --candidate-version with one exact version');
+assert.ok(candidate ? version === candidate : codexPolicyVersions.includes(version), 'Unverified native version');
 const features = featureNames(execFileSync(executable, ['features', 'list'], { encoding: 'utf8', env: subscriptionEnvironment() }));
 const root = await mkdtemp(join(tmpdir(), 'smart-codex-native-')), previousHome = process.env.CODEX_HOME;
 let rpc, server, timeout; const abort = new AbortController();
@@ -89,7 +91,7 @@ try {
   }); void resumedDone.catch(() => {});
   await rpc.request('turn/start', { threadId: thread.thread.id, model: 'smart-fixture', input: [{ type: 'text', text: 'Explicit continuation of local fixture' }] }); await resumedDone; rpc.onClose = undefined;
   assert.equal(requests, forced.length + 2);
-  console.log(JSON.stringify({ sessionRestart: 'passed', status: 'passed', kind: 'native-codex-policy-local-provider', advertisedTools: advertised[0], rejectedNativeTools: forced.length - 2, approvedSmartTools: methods.length, realProviderInferenceRequests: 0, billableCostUsd: 0 }));
+  console.log(JSON.stringify({ version, candidate: !!candidate, sessionRestart: 'passed', status: 'passed', kind: 'native-codex-policy-local-provider', advertisedTools: advertised[0], rejectedNativeTools: forced.length - 2, approvedSmartTools: methods.length, realProviderInferenceRequests: 0, billableCostUsd: 0 }));
 } finally {
   clearTimeout(timeout); abort.abort(); if (rpc) { rpc.onClose = undefined; await rpc.close(); }
   if (server) { server.closeAllConnections(); await new Promise(r => server.close(r)); }

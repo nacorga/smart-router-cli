@@ -10,7 +10,7 @@ import { OpenCodeBackend } from './opencode.js';
 import { DemoBackend } from './demo.js';
 import { ContinuityController } from './continuity.js';
 import { ContinuityStore, coordination } from './continuity-state.js';
-import { CodexBackend, ClaudeBackend } from './native-backends.js';
+import { createBackend } from './engine/backend-factory.js';
 import type { Destination, PortableTask } from './types.js';
 import { Controller } from './controller.js';
 import type { Backend, Config, Task } from './types.js';
@@ -68,13 +68,7 @@ async function main() {
     const override = deepOnly ? 'deep' : config.mode === 'manual' ? 'balanced' : undefined;
     console.log(JSON.stringify({ classification:c, availabilityChecked:false, stages:plan(c).map(s => config.destinations ? { kind: s.kind, candidates: config.destinations.map(d => ({ destination: d.id, backend: d.backend, billing: d.billing, ...routeTarget(s, c, { ...config, models: d.models }, override) })) } : ({kind:s.kind,...routeTarget(s,c,config,override)})) },null,2)); return;
   }
-  const makeBackend = async (d: Destination, approve: (description: string) => Promise<boolean>): Promise<Backend> => {
-    if (d.backend === 'codex') return new CodexBackend(d, project, approve);
-    if (d.backend === 'claude') return new ClaudeBackend(d, project, approve);
-    await loadLocalEnv(project);
-    if (!process.env.OPENROUTER_API_KEY) throw Object.assign(new Error('Missing OPENROUTER_API_KEY for explicitly configured API destination'), { code: 'SMART_AUTH_REQUIRED' });
-    const backend = await OpenCodeBackend.start(project, approve); backend.identity = d.id; backend.billing = 'api'; return backend;
-  };
+  const makeBackend = (d: Destination, approve: (description: string) => Promise<boolean>) => createBackend(d, project, approve);
   if (diagnosing) {
     const results = [];
     for (const d of config.destinations ?? [{ id: 'opencode', backend: 'opencode' as const, billing: 'api' as const, models: config.models }]) {
@@ -94,11 +88,16 @@ async function main() {
   console.log(`Project: ${project}\nBackend: ${config.destinations ? 'Sequential destination chain' : 'OpenCode SDK/server 1.19.3'} · provider: ${demo ? 'demo' : config.provider} · budget $${config.limits.maxCostUsd}`);
   const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: !!process.stdin.isTTY });
   let approval: ((b: boolean) => void) | undefined;
-  const approve = async (description: string) => {
+  const approve = async (description: string, signal?: AbortSignal) => {
+    if (signal?.aborted) return false;
     if (!process.stdin.isTTY) { console.log(`Permission denied in non-interactive mode: ${description}`); return false; }
     if (approval) return false;
     console.log(`Approve ONE operation: ${description}\nReply yes/no:`);
-    return new Promise<boolean>(r => { approval = r; });
+    return new Promise<boolean>(r => {
+      const finish = (value: boolean) => { signal?.removeEventListener('abort', cancel); if (approval === finish) approval = undefined; r(value && !signal?.aborted); };
+      const cancel = () => finish(false);
+      approval = finish; signal?.addEventListener('abort', cancel, { once: true });
+    });
   };
   let backend: Backend | undefined; let active: Promise<Task> | undefined; let controller: Controller | ContinuityController | undefined;
   let chosen: string | undefined = deepOnly ? 'deep' : config.mode === 'manual' ? 'balanced' : undefined;
@@ -129,6 +128,7 @@ async function main() {
     rl.on('close', () => { approval?.(false); approval = undefined; });
     rl.on('line', line => {
       if (approval && !line.startsWith('/')) { const resolveApproval = approval; approval = undefined; resolveApproval(/^(si|sí|yes)$/i.test(line.trim())); return; }
+      if (/^(si|sí|yes|no)$/i.test(line.trim())) { console.log('No active operation is awaiting approval.'); return; }
       void command(line).catch(e => console.error(e.message));
     });
     const onSignal = () => { approval?.(false); approval = undefined; void controller!.cancel().catch(() => console.error('Abort not confirmed')); };

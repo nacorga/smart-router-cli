@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "id": "parser-edge-cases",
+  "title": "Handle parser edge cases",
+  "objective": "Preserve the parser API and add regression coverage for empty and Unicode input.",
+  "repository": { "path": ".", "baseRef": "main" },
+  "scope": { "allowedPaths": ["src/**", "tests/**"], "protectedPaths": [".env*", ".github/**"] },
+  "acceptance": ["Existing behavior passes regression checks", "Empty and Unicode input have tests"],
+  "validation": { "commands": [{ "executable": "npm", "args": ["test"], "required": true }] },
+  "limits": { "maxRepairAttempts": 0, "timeoutMinutes": 30 },
+  "delivery": { "draftPR": false, "requireHumanApproval": true }
+}

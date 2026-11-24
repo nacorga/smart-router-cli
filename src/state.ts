@@ -23,7 +23,7 @@ export async function inspectProject(dir: string) {
   return { git: status !== 'NOT_A_GIT_REPOSITORY', branch, dirty: status === 'NOT_A_GIT_REPOSITORY' ? null : status.length > 0, instructionFiles: instructions };
 }
 export class Store {
-  constructor(readonly root = stateRoot()) {}
+  constructor(readonly root = stateRoot(), readonly lockRoot = root) {}
   private path(id: string) { if (!/^[a-f0-9-]{36}$/.test(id)) throw new Error('Invalid task ID'); return join(this.root, `${id}.json`); }
   async save(task: Task) {
     await mkdir(this.root, { recursive: true, mode: 0o700 });

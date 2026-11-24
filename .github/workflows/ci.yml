@@ -26,12 +26,15 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      - run: npm ci --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node scripts/setup-pinned-opencode.mjs
       - run: npm test
       - run: npm run test:permissions
       - run: npm run typecheck
       - run: npm run build
       - run: npm run reliability -- --verify-fixtures
+      - run: npm run smoke:validation
+      - run: npm run smoke:continuity
       - run: npm run audit:public
       - run: npm run smoke:package
       - name: Check tracked files are unchanged
@@ -48,7 +51,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node scripts/setup-pinned-opencode.mjs
       - run: npm run build
       - run: npm run smoke:server
       - run: npm run smoke:permissions

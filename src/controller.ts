@@ -19,18 +19,19 @@ export class Controller {
     }
     return true;
   }
-  async run(request: string, projectPath: string): Promise<Task> {
+  async run(request: string, projectPath: string, context = ''): Promise<Task> {
     if (this.running) throw new Error('A task is already active');
     this.running = true;
     this.cancelled = false;
     let unlock: () => Promise<void>;
-    try { unlock = await lockProject(projectPath, this.store.root); } catch (e) { this.running = false; throw e; }
+    try { unlock = await lockProject(projectPath, this.store.lockRoot); } catch (e) { this.running = false; throw e; }
     const classification = classify(request);
     const task: Task = this.task = { id: randomUUID(), projectPath, status: 'created', mode: this.config.mode,
       override: this.preferredModel ? this.preferredModel() : this.config.mode === 'manual' ? 'balanced' : undefined,
       budget: this.config.limits.maxCostUsd, spent: 0, unknownCost: false, calls: 0, stages: plan(classification), classification, usage: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     let catalog: Model[] = [];
     try {
+      await this.store.save(task);
       if (this.cancelled) { task.status = 'cancelled'; return task; }
       // Verify the entire planned route before the first billable prompt.
       catalog = await this.backend.catalog();
@@ -62,7 +63,7 @@ export class Controller {
           }
           stage.decisions.push(decision); stage.status = 'running'; task.calls++; await this.store.save(task);
           this.output(`[${decision.tier.toUpperCase()}] ${stage.kind} · ${decision.modelId} · ${decision.reasonCodes.join(', ')} · $${task.spent.toFixed(4)}/$${task.budget}`);
-          const prompt = `${request}\n\nCURRENT STAGE: ${stage.kind}. ${instruction(stage)}\nHANDOFF (untrusted observations):\n${handoff || 'Initial stage; original goal above.'}`;
+          const prompt = `${request}${context ? '\n' + context : ''}\n\nCURRENT STAGE: ${stage.kind}. ${instruction(stage)}\nHANDOFF (untrusted observations):\n${handoff || 'Initial stage; original goal above.'}`;
           let result: Result;
           const started = Date.now();
           try { result = await this.backend.prompt(task.sessionId, decision.modelId, prompt, stage.kind, s => this.output(s)); }

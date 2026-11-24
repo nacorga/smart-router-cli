@@ -4,9 +4,29 @@ const env={...process.env};delete env.OPENROUTER_API_KEY;for(const key of ['XDG_
 const run=(file,args,cwd=repo)=>exec(file,args,{cwd,env,timeout:120000,maxBuffer:4*1024*1024});
 const {stdout}=await run('npm',['pack','--json','--pack-destination',root]);const packed=JSON.parse(stdout)[0];
 for(const entry of packed.files){assert.ok(!/(?:^|\/)(?:snapshots|node_modules|artifacts|\.smart-router)\//.test(entry.path));assert.ok(!/\.(?:csv|png|tar\.gz)$/.test(entry.path));assert.ok(!/\.env(?!\.example)/.test(entry.path));assert.ok(!entry.path.includes('-RESULT.json'));}
-for(const path of ['LICENSE','README.md','SECURITY.md','dist/cli.js','benchmark/cases.json','benchmark/historical-summary.json','benchmark/reliability/cases.json','benchmark/reliability/rehearsal.config.json','dist/reliability.js','dist/continuity.js','dist/native-backends.js','dist/codex-backend.js','dist/codex-policy.js','dist/native-tools.js','dist/native-transport.js','dist/claude-quota.js','dist/claude-policy.js','dist/continuity-mcp.js','dist/continuity-pilot.js','dist/continuity-lifecycle-pilot.js','scripts/continuity-tty.py','docs/CONTINUITY.md'])assert.ok(packed.files.some(f=>f.path===path),path+' missing');
-const tarball=join(root,packed.filename);await fs.writeFile(join(install,'package.json'),JSON.stringify({name:'smart-clean-install',private:true}));
-await run('npm',['install','--no-audit','--no-fund',tarball],install);const pkg=join(install,'node_modules/smart-router-cli');const cli=join(pkg,'dist/cli.js');
+for(const path of ['LICENSE','README.md','SECURITY.md','dist/cli.js','dist/engine/index.js','dist/factory/cli.js','docs/FACTORY.md','docs/factory-task.example.json','benchmark/cases.json','benchmark/historical-summary.json','benchmark/reliability/cases.json','benchmark/reliability/rehearsal.config.json','dist/reliability.js','dist/continuity.js','dist/native-backends.js','dist/codex-backend.js','dist/codex-policy.js','dist/native-tools.js','dist/native-transport.js','dist/claude-quota.js','dist/claude-policy.js','dist/continuity-mcp.js','dist/continuity-pilot.js','dist/continuity-lifecycle-pilot.js','scripts/continuity-tty.py','docs/CONTINUITY.md'])assert.ok(packed.files.some(f=>f.path===path),path+' missing');
+const tarball=join(root,packed.filename);
+// npm ci caches lockfile tarballs, but need not cache registry packuments. Freeze
+// the install graph too: an offline npm install would fail in a fresh CI cache.
+const manifest=JSON.parse(await fs.readFile(join(repo,'package.json'),'utf8'));
+const lock=JSON.parse(await fs.readFile(join(repo,'package-lock.json'),'utf8'));
+const installedManifest={name:'smart-clean-install',version:'1.0.0',private:true,dependencies:{...manifest.dependencies,[manifest.name]:`file:${tarball}`}};
+const integrity='sha512-'+createHash('sha512').update(await fs.readFile(tarball)).digest('base64');
+const installedLock={...lock,name:installedManifest.name,version:installedManifest.version,packages:{...lock.packages,'':installedManifest,[`node_modules/${manifest.name}`]:{version:manifest.version,resolved:`file:${tarball}`,integrity,dependencies:manifest.dependencies,bin:manifest.bin,engines:manifest.engines,license:manifest.license}}};
+await fs.writeFile(join(install,'package.json'),JSON.stringify(installedManifest));await fs.writeFile(join(install,'package-lock.json'),JSON.stringify(installedLock));
+await run('npm',['ci','--offline','--ignore-scripts','--omit=dev','--no-audit','--no-fund'],install);const pkg=join(install,'node_modules/smart-router-cli');const cli=join(pkg,'dist/cli.js');
+// Do not execute third-party installation scripts. Reproduce the pinned binary copy
+// using only this installation's cached optional package, verified byte-for-byte.
+const pinned=await fs.readFile(join(repo,'node_modules/opencode-ai/bin/opencode.exe'));
+const nativePackage=JSON.parse(await fs.readFile(join(pkg,'node_modules/opencode-ai/package.json'),'utf8').catch(()=>fs.readFile(join(install,'node_modules/opencode-ai/package.json'),'utf8')));
+let copied=false;
+for(const name of Object.keys(nativePackage.optionalDependencies)){
+  try{const source=join(install,'node_modules',name,'bin',process.platform==='win32'?'opencode.exe':'opencode');const bytes=await fs.readFile(source);if(!bytes.equals(pinned))continue;const wrapper=join(install,'node_modules/opencode-ai/bin/opencode.exe');await fs.mkdir(join(wrapper,'..'),{recursive:true});await fs.copyFile(source,wrapper);await fs.chmod(wrapper,0o755);copied=true;break;}catch{/* Other platform package absent. */}
+}
+assert.ok(copied,'Pinned optional binary unavailable in offline package cache');
+const factoryCli=join(pkg,'dist/factory/cli.js');assert.match((await run(process.execPath,[factoryCli,'--help'],install)).stdout,/TaskSpec never grants tools/);
+assert.ok(await fs.stat(join(install,'node_modules/.bin/factory')));
+
 assert.ok(!(await fs.lstat(join(install,'node_modules'))).isSymbolicLink());
 assert.match((await run(process.execPath,[cli,'--help'],install)).stdout,/Interactive mode/);
 await run(process.execPath,[cli,'--init'],install);assert.match(await fs.readFile(join(install,'smart-router.config.json'),'utf8'),/<FAST_MODEL_ID>/);
@@ -17,4 +37,4 @@ const server=(await run(process.execPath,[join(pkg,'dist/server-smoke.js')],inst
 const reliability=JSON.parse((await run(process.execPath,[join(pkg,'dist/reliability.js')],install)).stdout);assert.equal(reliability.status,'NOT_RUN');assert.equal(reliability.slots.length,60);
 const frozen=JSON.parse((await run(process.execPath,[join(pkg,'dist/reliability.js'),'--freeze','--config',join(pkg,'benchmark/reliability/rehearsal.config.json'),'--budget','1','--per-run-budget','0.05','--output',join(root,'reliability-plan.json')],install)).stdout);assert.equal(frozen.status,'FROZEN_NOT_RUN');assert.match(frozen.planSha256,/^[a-f0-9]{64}$/);
 const lifecycle=JSON.parse((await run(process.execPath,[join(pkg,'dist/continuity-lifecycle-pilot.js')],install)).stdout);assert.equal(lifecycle.status,'NOT_RUN');assert.deepEqual(lifecycle.cases,['recovery','cancel-command','deny']);
-const checksum=createHash('sha256').update(await fs.readFile(tarball)).digest('hex');const report={status:'passed',packageVersion:packed.version,packageFiles:packed.files.length,independentDependencies:true,checks:['help','init','plan','offline demo','native server','reliability preview','installed reliability freeze','subscription init','subscription plan','installed lifecycle preview'],realProviderInferenceRequests:0,billableCostUsd:0,tarball,sha256:checksum};await fs.writeFile(join(root,'package-smoke.json'),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
+const checksum=createHash('sha256').update(await fs.readFile(tarball)).digest('hex');const report={status:'passed',packageVersion:packed.version,packageFiles:packed.files.length,independentDependencies:true,lifecycleScripts:false,frozenRuntimeLock:true,binarySetup:'verified-pinned-byte-copy',checks:['factory help','factory bin','help','init','plan','offline demo','native server','reliability preview','installed reliability freeze','subscription init','subscription plan','installed lifecycle preview'],realProviderInferenceRequests:0,billableCostUsd:0,tarball,sha256:checksum};await fs.writeFile(join(root,'package-smoke.json'),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));

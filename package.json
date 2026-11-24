@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Explainable model routing for local OpenCode sessions",
   "bin": {
-    "smart": "dist/cli.js"
+    "smart": "dist/cli.js",
+    "factory": "dist/factory/cli.js"
   },
   "engines": {
     "node": ">=22"
@@ -13,7 +14,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --exclude '**/.smart-router/**'",
+    "test": "vitest run --maxWorkers=2 --exclude '**/.smart-router/**'",
     "dev": "node --import tsx src/cli.ts",
     "spike": "node --import tsx src/spike.ts",
     "benchmark": "node --import tsx src/benchmark.ts",
@@ -37,7 +38,9 @@
     "pilot:continuity": "npm run build && node dist/continuity-pilot.js",
     "smoke:codex-policy": "npm run build && node scripts/codex-policy-smoke.mjs",
     "smoke:claude-policy": "npm run build && node scripts/claude-policy-smoke.mjs",
-    "pilot:lifecycle": "npm run build && node dist/continuity-lifecycle-pilot.js"
+    "pilot:lifecycle": "npm run build && node dist/continuity-lifecycle-pilot.js",
+    "test:factory": "vitest run tests/engine-api.test.ts tests/factory-*.test.ts",
+    "pilot:factory:prepare": "npm run build && node dist/factory-pilot-preparation.js"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.303",
@@ -62,7 +65,8 @@
     "CONTRIBUTING.md",
     "benchmark/historical-summary.json",
     "benchmark/reliability/",
-    "scripts/continuity-tty.py"
+    "scripts/continuity-tty.py",
+    "scripts/setup-pinned-opencode.mjs"
   ],
   "license": "MIT",
   "author": "nacorga",

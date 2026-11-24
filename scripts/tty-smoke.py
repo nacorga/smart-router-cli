@@ -50,6 +50,11 @@ try:
  send('no');wait_for('Result: blocked',offset)
  assert (root/'note.txt').read_text()=='BEFORE'
  print('TTY rejection preserved file',flush=True)
+ offset=len(output);request_count=len(requests);send('yes')
+ wait_for('No active operation is awaiting approval.',offset)
+ assert len(requests)==request_count
+ assert (root/'note.txt').read_text()=='BEFORE'
+ print('TTY late approval did not start a new task',flush=True)
  offset=len(output);send('Corrige la errata de note.txt')
  wait_for('Approve ONE operation:',offset);wait_for('Reply yes/no:',offset)
  send('yes');wait_for('Result: unverified',offset)
@@ -66,7 +71,7 @@ try:
    try: output+=os.read(fd,65536).decode('utf8',errors='replace')
    except OSError: pass
  assert exit_status==1,('exit',exit_status)
- report={'status':'passed','transport':'POSIX controlling pseudo-terminal; scripted yes/no keystrokes, not human UX assessment','runtime':'fresh tarball installation with its own npm dependencies, no symlink' if installed else 'compiled repository CLI','projectPath':str(root),'localMockRequests':len(requests),'realProviderInferenceRequests':0,'billableCostUsd':0,'checks':{'permissionRejectPreservesFile':True,'permissionYesAllowsExactEdit':True,'noTestsRemainUnverified':True,'statusInTTY':True,'cleanExit':True},'exitCode':exit_status,'exitCodeReason':'Earlier rejected task sets exit code 1; process exited normally','finishedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}
+ report={'status':'passed','transport':'POSIX controlling pseudo-terminal; scripted yes/no keystrokes, not human UX assessment','runtime':'fresh tarball installation with its own npm dependencies, no symlink' if installed else 'compiled repository CLI','projectPath':str(root),'localMockRequests':len(requests),'realProviderInferenceRequests':0,'billableCostUsd':0,'checks':{'permissionRejectPreservesFile':True,'lateApprovalCannotStartTask':True,'permissionYesAllowsExactEdit':True,'noTestsRemainUnverified':True,'statusInTTY':True,'cleanExit':True},'exitCode':exit_status,'exitCodeReason':'Earlier rejected task sets exit code 1; process exited normally','finishedAt':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())}
  (root/'tty-smoke-result.json').write_text(json.dumps(report,indent=2)+'\n')
  print(json.dumps(report),flush=True)
 finally:

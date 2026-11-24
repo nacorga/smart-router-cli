@@ -16,3 +16,11 @@ it('accepts the exact GitHub automation committer while rejecting personal addre
     await expect(exec(process.execPath,[audit],{cwd:root})).rejects.toThrow('Commit identity');
   }finally{await rm(root,{recursive:true,force:true});}
 });
+it('fails closed when Git metadata exists but its history cannot be inspected', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'smart-audit-invalid-git-'));
+  try {
+    const { mkdir } = await import('node:fs/promises'); await mkdir(join(root, '.git'));
+    await writeFile(join(root, 'safe.txt'), 'public fixture');
+    await expect(exec(process.execPath, [audit], { cwd: root })).rejects.toThrow('Git history unavailable');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

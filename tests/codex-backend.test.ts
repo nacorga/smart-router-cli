@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ApprovalProvider } from '../src/approval.js';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -7,13 +8,14 @@ import { claudeQuota } from '../src/claude-quota.js';
 import { cachedCodexModels, featureNames, restrictedCodexModel, verifyCodexPolicy } from '../src/codex-policy.js';
 import type { Destination } from '../src/types.js';
 const cleanup: (() => Promise<void>)[] = [];
-afterEach(async () => { for (const fn of cleanup.splice(0)) await fn(); });
-async function fixture(scenario = 'ok') {
+afterEach(async () => { vi.useRealTimers(); for (const fn of cleanup.splice(0)) await fn(); });
+async function fixture(scenario = 'ok', authorize?: ApprovalProvider) {
   const root = await mkdtemp(join(tmpdir(), 'smart-codex-contract-')), executable = join(root, 'codex.mjs'), home = join(root, 'home'); await mkdir(home);
   const previous = process.env.CODEX_HOME; process.env.CODEX_HOME = home;
   cleanup.push(async () => { if (previous === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = previous; await rm(root, { recursive: true, force: true }); });
   await writeFile(join(home, 'models_cache.json'), JSON.stringify({ identity: { private: 'not-model-metadata' }, models: [{ slug: 'fixture-model', context_window: 200000 }] }));
   await writeFile(join(root, 'value.txt'), 'prior');
+  await writeFile(join(root, 'test.mjs'), "import assert from 'node:assert/strict'; assert.equal(2 + 3, 5);\n");
   await writeFile(join(root, 'package.json'), JSON.stringify({ scripts: { test: 'node -e "process.exit(0)"' } }));
   await writeFile(executable, `#!/usr/bin/env node
 import {createInterface} from 'node:readline';import fs from 'node:fs/promises';
@@ -30,9 +32,9 @@ const complete=()=>{const boundary=['final-boundary','over-boundary','tools-afte
  if(scenario==='tools-after-final'){phase=0;call();return;}
  const finish=()=>send({method:'turn/completed',params:{threadId:'fixture-session',turn:{id:turn,status:scenario==='quota'||scenario==='quota-after'||scenario==='rate'?'failed':'completed',error:{codexErrorInfo:scenario==='rate'?'rateLimitExceeded':'usageLimitExceeded'}}}});
  if(boundary)setTimeout(finish,30);else finish();};
-const call=()=>{pending='tool-'+(++tools);send({id:pending,method:'item/tool/call',params:{threadId:'fixture-session',turnId:turn,callId:pending,tool:phase===0?'smart_write_file':'smart_run_command',arguments:phase===0?{path:'value.txt',content:'preserved'}:{command:'npm test'}}});};
+const call=()=>{pending='tool-'+(++tools);send({id:pending,method:'item/tool/call',params:{threadId:'fixture-session',turnId:turn,callId:pending,tool:phase===0?'smart_write_file':'smart_run_command',arguments:phase===0?{path:'value.txt',content:'preserved'}:{command:scenario==='direct-node'?'node --test test.mjs':'npm test'}}});};
 for await(const line of createInterface({input:process.stdin})){
- const m=JSON.parse(line);if(!m.method){if(m.id===pending){phase++;if(phase===1&&scenario!=='quota-after')call();else complete();}continue;}
+ const m=JSON.parse(line);if(!m.method){if(m.id===pending){phase++;if(phase===1&&scenario!=='quota-after'&&scenario!=='write-only')call();else complete();}continue;}
  await fs.appendFile(root+'/methods.jsonl',JSON.stringify({method:m.method})+'\\n');if(m.id===undefined)continue;
  if(m.method==='initialize')result(m.id,{});
  else if(m.method==='account/read')result(m.id,{account:{type:scenario==='api'?'apiKey':'chatgpt'}});
@@ -47,10 +49,50 @@ for await(const line of createInterface({input:process.stdin})){
 }
 `, { mode: 0o700 });
   const destination: Destination = { id: 'codex-fixture', backend: 'codex', billing: 'subscription', executable, models: { fast: 'fixture-model', balanced: 'fixture-model', deep: 'fixture-model' } };
-  const approvals: string[] = []; const backend = new CodexBackend(destination, root, async description => { approvals.push(description); return scenario !== 'denied'; }); cleanup.unshift(() => backend.close());
+  const approvals: string[] = []; const backend = new CodexBackend(destination, root, async (description, signal) => { approvals.push(description); return authorize ? authorize(description, signal) : scenario !== 'denied'; }); cleanup.unshift(() => backend.close());
   return { root, backend, approvals };
 }
 describe('Codex native contract with deterministic subprocess', () => {
+  it('executes an explicitly approved direct Node check through the native protocol', async () => {
+    const { backend, approvals } = await fixture('direct-node'); await backend.probe();
+    const result = await backend.prompt(await backend.create(), 'fixture-model', 'Validate', 'validate', () => {});
+    expect(result.failure).toBeUndefined(); expect(result.validation).toBe('passed');
+    expect(result.toolEvents).toContainEqual(expect.objectContaining({ kind: 'command', exitCode: 0 }));
+    expect(approvals.filter(d => d.startsWith('bash: node --test test.mjs\n'))).toHaveLength(1);
+  });
+  it('allows a human wait beyond 120 seconds without extending active work or wall limits', async () => {
+    let entered!: () => void, answer!: (value: boolean) => void;
+    const waiting = new Promise<void>(r => { entered = r; });
+    const { root, backend } = await fixture('write-only', async () => { entered(); return new Promise<boolean>(r => { answer = r; }); });
+    await backend.probe(); const session = await backend.create();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    const pending = backend.prompt(session, 'fixture-model', 'Task', 'implement', () => {});
+    await waiting; await vi.advanceTimersByTimeAsync(125000);
+    expect(await readFile(join(root, 'value.txt'), 'utf8')).toBe('prior');
+    answer(true); const result = await pending; vi.useRealTimers();
+    expect(result.failure).toBeUndefined(); expect(await readFile(join(root, 'value.txt'), 'utf8')).toBe('preserved');
+  });
+  it('expires the host prompt at the wall cap and ignores a late answer', async () => {
+    let entered!: () => void, answer!: (value: boolean) => void, hostSignal: AbortSignal | undefined;
+    const waiting = new Promise<void>(r => { entered = r; });
+    const { root, backend } = await fixture('write-only', async (_description, signal) => { hostSignal = signal; entered(); return new Promise<boolean>(r => { answer = r; }); });
+    await backend.probe(); const session = await backend.create();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    const pending = backend.prompt(session, 'fixture-model', 'Task', 'implement', () => {});
+    const rejected = expect(pending).rejects.toThrow('CODEX_WALL_TIMEOUT');
+    await waiting; await vi.advanceTimersByTimeAsync(300000); await rejected; vi.useRealTimers();
+    expect(hostSignal?.aborted).toBe(true); answer(true); await new Promise(r => setImmediate(r));
+    expect(await readFile(join(root, 'value.txt'), 'utf8')).toBe('prior');
+  });
+  it('retains the active timeout when the provider never responds', async () => {
+    const { backend, root } = await fixture('wait'); await backend.probe(); const session = await backend.create();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    const pending = backend.prompt(session, 'fixture-model', 'Task', 'implement', () => {});
+    const rejected = expect(pending).rejects.toThrow('CODEX_TURN_TIMEOUT');
+    // Drain real subprocess I/O before advancing the native timer (no host approval is pending).
+    while (!(await readFile(join(root, 'methods.jsonl'), 'utf8')).includes('turn/start')) await new Promise(r => setImmediate(r));
+    await vi.advanceTimersByTimeAsync(120000); await rejected; vi.useRealTimers();
+  });
   it('enforces a restricted profile and executes only approved operations with real exit evidence', async () => {
     const { root, backend } = await fixture(); expect(await backend.probe()).toMatchObject({ authenticated: true, policyEnforced: true });
     const session = await backend.create(); await backend.prepare(session);
